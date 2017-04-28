@@ -26,7 +26,7 @@ def onmsg(key, data, replay=False):
     cmd, user = data['cmd'], data['user']
     if cmd == 'comment':
         print 'revsync: %s %s %#x %s' % (cmd, user, data['addr'], data['text'])
-    elif cmd == 'extra_command':
+    elif cmd == 'extra_comment':
         print 'revsync: %s %s %#x %s' % (cmd, user, data['addr'], data['text'])
     elif cmd == 'area_comment':
         print 'revsync: %s %s %#x %s' % (cmd, user, data['range'], data['text'])
