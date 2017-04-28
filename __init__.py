@@ -1,0 +1,25 @@
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+
+from config import config
+good = False
+
+try:
+    import binaryninja
+    print('DOING BINJA')
+    import binja_frontend
+    good = True
+except ImportError:
+    pass
+
+try:
+    import idaapi
+    print('DOING IDA')
+    import ida_frontend
+    good = True
+except ImportError:
+    pass
+
+if not good:
+    print 'Warning: both IDA and Binary Ninja plugin API imports failed'
