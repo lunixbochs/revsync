@@ -1,4 +1,4 @@
-import defaultdict
+from collections import defaultdict
 import json
 import redis
 import threading
@@ -17,7 +17,7 @@ def decode(data):
     return {key_dec.get(k, k): v for k, v in d.items()}
 
 def dtokey(d):
-    return tuple(k, v for k, v in d.items() if k != 'user')
+    return tuple(((k, v) for k, v in d.items() if k != 'user'))
 
 class Client:
     def __init__(self, host, port, nick, password=None):
@@ -38,7 +38,7 @@ class Client:
                         no = self.norecv[key]
                         if dkey in no:
                             no.remove(dkey)
-                            return
+                            continue
                         else:
                             self.nosend[key].append(dkey)
 
@@ -77,6 +77,7 @@ class Client:
             no = self.nosend[key]
             if dkey in no:
                 no.remove(dkey)
+                return
             else:
                 self.norecv[key].append(dkey)
 

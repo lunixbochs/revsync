@@ -26,12 +26,15 @@ def onmsg(key, data, replay=False):
     cmd, user = data['cmd'], data['user']
     if cmd == 'comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+        MakeComm(get_ea(data['addr']), str(data['text']))
     elif cmd == 'extra_comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+        MakeRptComm(get_ea(data['addr']), str(data['text']))
     elif cmd == 'area_comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['range'], data['text'])
     elif cmd == 'rename':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+        MakeName(get_ea(data['addr']), str(data['text']))
     elif cmd == 'join':
         print 'revsync: <%s> joined' % (user)
     else:
