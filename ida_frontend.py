@@ -32,6 +32,8 @@ def onmsg(key, data, replay=False):
         print 'revsync: %s %s %#x %s' % (cmd, user, data['range'], data['text'])
     elif cmd == 'rename':
         print 'revsync: %s %s %#x %s' % (cmd, user, data['addr'], data['text'])
+    elif cmd == 'join':
+        print 'revsync: %s joined' % (user)
     else:
         print 'revsync: unknown cmd', data
 
