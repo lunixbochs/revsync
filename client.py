@@ -19,11 +19,10 @@ class Client:
     def __init__(self, host, port, nick, password=None):
         self.r = redis.StrictRedis(host=host, port=port, password=password)
         self.nick = nick
+        self.ps = {}
 
-    def _sub_thread(self, key, cb):
-        pubsub = self.r.pubsub()
-        pubsub.subscribe(key)
-        for item in pubsub.listen():
+    def _sub_thread(self, ps, cb, key):
+        for item in ps.listen():
             try:
                 if item['type'] == 'message':
                     cb(key, decode(item['data']))
@@ -40,14 +39,20 @@ class Client:
                 print 'error processing item', item
                 traceback.print_exc()
 
-    def subscribe(self, key, cb):
-        t = threading.Thread(target=self._sub_thread, args=(key, cb))
+    def join(self, key, cb):
+        ps = self.r.pubsub()
+        ps.subscribe(key)
+        t = threading.Thread(target=self._sub_thread, args=(ps, cb, key))
         t.daemon = True
         t.start()
 
-    def start(self, key, cb):
-        self.subscribe(key, cb)
+        self.ps[key] = ps
         self.publish(key, {'cmd': 'join'}, perm=False)
+
+    def leave(self, key):
+        ps = self.ps.pop(key, None)
+        if ps:
+            ps.unsubscribe(key)
 
     def publish(self, key, data, perm=True):
         data['user'] = self.nick
