@@ -8,6 +8,7 @@ from config import config
 get_fhash = retrieve_input_file_sha256
 fhash = None
 client = Client(**config)
+auto_wait = False
 
 def onmsg(key, data, replay=False):
     if key != fhash or key != retrieve_input_file_sha256():
@@ -35,6 +36,8 @@ def on_load():
     client.join(fhash, onmsg)
 
 def publish(data):
+    if not autoIsOk():
+        return
     if fhash == get_fhash():
         client.publish(fhash, data)
 
@@ -45,12 +48,22 @@ class IDPHooks(IDP_Hooks):
         return IDP_Hooks.renamed(self, ea, new_name, local_name)
 
     def newfile(self, fname):
-        on_load()
+        global auto_wait
+        auto_wait = True
+        print 'revsync: waiting for auto analysis'
         return IDP_Hooks.newfile(self, fname)
 
     def oldfile(self, fname):
         on_load()
         return IDP_Hooks.oldfile(self, fname)
+
+    def auto_empty_finally(self):
+        global auto_wait
+        if auto_wait:
+            auto_wait = False
+            on_load()
+
+        return IDP_Hooks.auto_empty_finally(self)
 
 class IDBHooks(IDB_Hooks):
     def cmt_changed(self, ea, repeatable):
@@ -58,16 +71,21 @@ class IDBHooks(IDB_Hooks):
         publish({'cmd': 'comment', 'addr': ea, 'text': cmt})
         return IDB_Hooks.cmt_changed(self, ea, repeatable)
 
-    def extra_cmt_changed(self, ea, repeatable):
+    def extra_cmt_changed(self, ea, line_idx, repeatable):
         cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'extra_comment', 'addr': ea, 'text': cmt})
-        return IDB_Hooks.extra_cmt_changed(self, ea, repeatable)
+        publish({'cmd': 'extra_comment', 'addr': ea, 'line': line_idx, 'text': cmt})
+        return IDB_Hooks.extra_cmt_changed(self, ea, line_idx, repeatable)
 
     def area_cmt_changed(self, cb, a, cmt, repeatable):
         publish({'cmd': 'area_comment', 'range': [a.startEA, a.endEA], 'text': cmt})
         return IDB_Hooks.area_cmt_changed(self, cb, a, cmt, repeatable)
 
+class UIHooks(UI_Hooks):
+    pass
+
 hook1 = IDPHooks()
 hook2 = IDBHooks()
+hook3 = UIHooks()
 hook1.hook()
 hook2.hook()
+hook3.hook()
