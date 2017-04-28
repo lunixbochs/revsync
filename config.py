@@ -3,5 +3,5 @@ config = {
     'port': 0,
     'password': '',
     # please change this
-    'nick': 'anon',
+    'nick': 'aegis',
 }
