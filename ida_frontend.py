@@ -10,6 +10,14 @@ fhash = None
 client = Client(**config)
 auto_wait = False
 
+def get_can_addr(addr):
+    """Convert an Effective Address to a canonical address."""
+    return addr - get_imagebase()
+
+def get_ea(addr):
+    """Get Effective Address from a canonical address."""
+    return addr + get_imagebase()
+
 def onmsg(key, data, replay=False):
     if key != fhash or key != retrieve_input_file_sha256():
         print 'revsync: hash mismatch, dropping command'
@@ -44,7 +52,7 @@ def publish(data):
 class IDPHooks(IDP_Hooks):
     def renamed(self, ea, new_name, local_name):
         if isLoaded(ea):
-            publish({'cmd': 'rename', 'addr': ea, 'text': new_name})
+            publish({'cmd': 'rename', 'addr': get_can_addr(ea), 'text': new_name})
         return IDP_Hooks.renamed(self, ea, new_name, local_name)
 
     def newfile(self, fname):
@@ -68,16 +76,16 @@ class IDPHooks(IDP_Hooks):
 class IDBHooks(IDB_Hooks):
     def cmt_changed(self, ea, repeatable):
         cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'comment', 'addr': ea, 'text': cmt})
+        publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': cmt})
         return IDB_Hooks.cmt_changed(self, ea, repeatable)
 
     def extra_cmt_changed(self, ea, line_idx, repeatable):
         cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'extra_comment', 'addr': ea, 'line': line_idx, 'text': cmt})
+        publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': cmt})
         return IDB_Hooks.extra_cmt_changed(self, ea, line_idx, repeatable)
 
     def area_cmt_changed(self, cb, a, cmt, repeatable):
-        publish({'cmd': 'area_comment', 'range': [a.startEA, a.endEA], 'text': cmt})
+        publish({'cmd': 'area_comment', 'range': [get_can_addr(a.startEA), get_can_addr(a.endEA)], 'text': cmt})
         return IDB_Hooks.area_cmt_changed(self, cb, a, cmt, repeatable)
 
 class UIHooks(UI_Hooks):
