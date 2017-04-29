@@ -11,7 +11,7 @@ def get_fhash():
     if filename is None:
         return None
     with open(filename, 'rb') as f:
-        return hashlib.sha256(f.read()).hexdigest()
+        return hashlib.sha256(f.read()).hexdigest().upper()
 
 fhash = None
 client = Client(**config)
