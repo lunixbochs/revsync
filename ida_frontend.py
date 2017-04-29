@@ -5,7 +5,7 @@ from idautils import *
 from client import Client
 from config import config
 
-get_fhash = retrieve_input_file_sha256
+get_fhash = retrieve_input_file_md5
 fhash = None
 client = Client(**config)
 auto_wait = False
@@ -19,7 +19,7 @@ def get_ea(addr):
     return addr + get_imagebase()
 
 def onmsg(key, data, replay=False):
-    if key != fhash or key != retrieve_input_file_sha256():
+    if key != fhash or key != get_fhash():
         print 'revsync: hash mismatch, dropping command'
         return
 
