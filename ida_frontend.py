@@ -81,16 +81,16 @@ class IDPHooks(IDP_Hooks):
 class IDBHooks(IDB_Hooks):
     def cmt_changed(self, ea, repeatable):
         cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': cmt})
+        publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': cmt or ''})
         return IDB_Hooks.cmt_changed(self, ea, repeatable)
 
     def extra_cmt_changed(self, ea, line_idx, repeatable):
         cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': cmt})
+        publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': cmt or ''})
         return IDB_Hooks.extra_cmt_changed(self, ea, line_idx, repeatable)
 
     def area_cmt_changed(self, cb, a, cmt, repeatable):
-        publish({'cmd': 'area_comment', 'range': [get_can_addr(a.startEA), get_can_addr(a.endEA)], 'text': cmt})
+        publish({'cmd': 'area_comment', 'range': [get_can_addr(a.startEA), get_can_addr(a.endEA)], 'text': cmt or ''})
         return IDB_Hooks.area_cmt_changed(self, cb, a, cmt, repeatable)
 
 class UIHooks(UI_Hooks):
