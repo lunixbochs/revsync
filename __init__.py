@@ -7,7 +7,6 @@ good = False
 
 try:
     import binaryninja
-    print('DOING BINJA')
     import binja_frontend
     good = True
 except ImportError:
@@ -15,7 +14,6 @@ except ImportError:
 
 try:
     import idaapi
-    print('DOING IDA')
     import ida_frontend
     good = True
 except ImportError:
