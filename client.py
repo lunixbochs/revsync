@@ -50,7 +50,8 @@ class Client:
                 elif item['type'] == 'subscribe':
                     for data in self.r.lrange(key, 0, -1):
                         try:
-                            cb(key, decode(data), replay=True)
+                            data = decode(data)
+                            cb(key, data, replay=True)
                             self.nosend[key].append(dtokey(data))
                         except Exception:
                             print 'error replaying history', data
