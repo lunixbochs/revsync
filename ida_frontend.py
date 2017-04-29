@@ -2,10 +2,17 @@ from idaapi import *
 from idc import *
 from idautils import *
 
+import hashlib
 from client import Client
 from config import config
 
-get_fhash = retrieve_input_file_md5
+filename = None
+def get_fhash():
+    if filename is None:
+        return None
+    with open(filename, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
 fhash = None
 client = Client(**config)
 auto_wait = False
@@ -62,11 +69,15 @@ class IDPHooks(IDP_Hooks):
 
     def newfile(self, fname):
         global auto_wait
+        global filename
+        filename = fname
         auto_wait = True
         print 'revsync: waiting for auto analysis'
         return IDP_Hooks.newfile(self, fname)
 
     def oldfile(self, fname):
+        global filename
+        filename = fname
         on_load()
         return IDP_Hooks.oldfile(self, fname)
 
