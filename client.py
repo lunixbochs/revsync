@@ -28,25 +28,30 @@ class Client:
         self.nosend = defaultdict(list)
         self.norecv = defaultdict(list)
 
+    def debounce(self, no, data):
+        dkey = dtokey(data)
+        with self.nolock:
+            if dkey in no:
+                no.remove(dkey)
+                return True
+            else:
+                no.append(dkey)
+        return False
+
     def _sub_thread(self, ps, cb, key):
         for item in ps.listen():
             try:
                 if item['type'] == 'message':
                     data = decode(item['data'])
-                    with self.nolock:
-                        dkey = dtokey(data)
-                        no = self.norecv[key]
-                        if dkey in no:
-                            no.remove(dkey)
-                            continue
-                        else:
-                            self.nosend[key].append(dkey)
-
+                    if self.debounce(self.norecv[key], data):
+                        continue
                     cb(key, data)
+                    self.nosend[key].append(dtokey(data))
                 elif item['type'] == 'subscribe':
                     for data in self.r.lrange(key, 0, -1):
                         try:
                             cb(key, decode(data), replay=True)
+                            self.nosend[key].append(dtokey(data))
                         except Exception:
                             print 'error replaying history', data
                             traceback.print_exc()
@@ -72,14 +77,8 @@ class Client:
             ps.unsubscribe(key)
 
     def publish(self, key, data, perm=True):
-        with self.nolock:
-            dkey = dtokey(data)
-            no = self.nosend[key]
-            if dkey in no:
-                no.remove(dkey)
-                return
-            else:
-                self.norecv[key].append(dkey)
+        if self.debounce(self.nosend[key], data):
+            return
 
         data['user'] = self.nick
         data = {key_enc.get(k, k): v for k, v in data.items()}
