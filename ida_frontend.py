@@ -31,7 +31,7 @@ def onmsg(key, data, replay=False):
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
         MakeRptComm(get_ea(data['addr']), str(data['text']))
     elif cmd == 'area_comment':
-        print 'revsync: <%s> %s %#x %s' % (user, cmd, data['range'], data['text'])
+        print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
     elif cmd == 'rename':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
         MakeName(get_ea(data['addr']), str(data['text']))
