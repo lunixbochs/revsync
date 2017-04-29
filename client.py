@@ -34,8 +34,6 @@ class Client:
             if dkey in no:
                 no.remove(dkey)
                 return True
-            else:
-                no.append(dkey)
         return False
 
     def _sub_thread(self, ps, cb, key):
@@ -45,14 +43,16 @@ class Client:
                     data = decode(item['data'])
                     if self.debounce(self.norecv[key], data):
                         continue
+                    with self.nolock:
+                        self.nosend[key].append(dtokey(data))
                     cb(key, data)
-                    self.nosend[key].append(dtokey(data))
                 elif item['type'] == 'subscribe':
                     for data in self.r.lrange(key, 0, -1):
                         try:
                             data = decode(data)
+                            with self.nolock:
+                                self.nosend[key].append(dtokey(data))
                             cb(key, data, replay=True)
-                            self.nosend[key].append(dtokey(data))
                         except Exception:
                             print 'error replaying history', data
                             traceback.print_exc()
@@ -80,6 +80,7 @@ class Client:
     def publish(self, key, data, perm=True):
         if self.debounce(self.nosend[key], data):
             return
+        self.norecv[key].append(dtokey(data))
 
         data['user'] = self.nick
         data = {key_enc.get(k, k): v for k, v in data.items()}
