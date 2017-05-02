@@ -6,16 +6,18 @@ import hashlib
 from client import Client
 from config import config
 
-filename = None
+fhash = None
+auto_wait = False
+client = Client(**config)
+
+### Helper Functions
+
 def get_fhash():
+    filename = idaapi.get_root_filename()
     if filename is None:
         return None
     with open(filename, 'rb') as f:
         return hashlib.sha256(f.read()).hexdigest().upper()
-
-fhash = None
-client = Client(**config)
-auto_wait = False
 
 def get_can_addr(addr):
     """Convert an Effective Address to a canonical address."""
@@ -24,6 +26,8 @@ def get_can_addr(addr):
 def get_ea(addr):
     """Get Effective Address from a canonical address."""
     return addr + get_imagebase()
+
+### Redis Functions ###
 
 def onmsg(key, data, replay=False):
     if key != fhash or key != get_fhash():
@@ -47,19 +51,13 @@ def onmsg(key, data, replay=False):
     else:
         print 'revsync: unknown cmd', data
 
-def on_load():
-    global fhash
-    if fhash:
-        client.leave(fhash)
-    fhash = get_fhash()
-    print 'revsync: connecting with', fhash
-    client.join(fhash, onmsg)
-
 def publish(data):
     if not autoIsOk():
         return
     if fhash == get_fhash():
         client.publish(fhash, data)
+
+### IDA Hook Classes ###
 
 class IDPHooks(IDP_Hooks):
     def renamed(self, ea, new_name, local_name):
@@ -67,26 +65,12 @@ class IDPHooks(IDP_Hooks):
             publish({'cmd': 'rename', 'addr': get_can_addr(ea), 'text': new_name})
         return IDP_Hooks.renamed(self, ea, new_name, local_name)
 
-    def newfile(self, fname):
-        global auto_wait
-        global filename
-        filename = fname
-        auto_wait = True
-        print 'revsync: waiting for auto analysis'
-        return IDP_Hooks.newfile(self, fname)
-
-    def oldfile(self, fname):
-        global filename
-        filename = fname
-        on_load()
-        return IDP_Hooks.oldfile(self, fname)
-
+    # TODO: make sure this is on 6.1
     def auto_empty_finally(self):
         global auto_wait
         if auto_wait:
             auto_wait = False
             on_load()
-
         return IDP_Hooks.auto_empty_finally(self)
 
 class IDBHooks(IDB_Hooks):
@@ -107,9 +91,64 @@ class IDBHooks(IDB_Hooks):
 class UIHooks(UI_Hooks):
     pass
 
+### Setup Events ###
+
+def on_load():
+    global fhash
+    if fhash:
+        client.leave(fhash)
+    fhash = get_fhash()
+    print 'revsync: connecting with', fhash
+    client.join(fhash, onmsg)
+
+def wait_for_analysis():
+    global auto_wait
+    if autoIsOk():
+        auto_wait = False
+        on_load()
+        return -1
+    return 1000
+
+def on_open():
+    print 'revsync: file opened:', idaapi.get_root_filename()
+    global auto_wait
+    if autoIsOk():
+        on_load()
+        auto_wait = False
+    else:
+        auto_wait = True
+        print 'revsync: waiting for auto analysis'
+        if not hasattr(IDP_Hooks, 'auto_empty_finally'):
+            idaapi.register_timer(1000, wait_for_analysis)
+
+def on_close():
+    global fhash
+    if fhash:
+        client.leave(fhash)
+        fhash = None
+
 hook1 = IDPHooks()
 hook2 = IDBHooks()
 hook3 = UIHooks()
+
+def eventhook(event, old=0):
+    if event == idaapi.NW_OPENIDB:
+        on_open()
+    elif event in (idaapi.NW_CLOSEIDB, idaapi.NW_TERMIDA):
+        on_close()
+    if event == idaapi.NW_TERMIDA:
+        # remove hook on way out
+        idaapi.notify_when(idaapi.NW_OPENIDB | idaapi.NW_CLOSEIDB | idaapi.NW_TERMIDA | idaapi.NW_REMOVE, eventhook)
+
+def setup():
+    if idaapi.get_root_filename():
+        on_open()
+    else:
+        idaapi.notify_when(idaapi.NW_OPENIDB | idaapi.NW_CLOSEIDB | idaapi.NW_TERMIDA, eventhook)
+    return -1
+
 hook1.hook()
 hook2.hook()
 hook3.hook()
+idaapi.register_timer(1000, setup)
+print 'revsync: starting setup timer'
