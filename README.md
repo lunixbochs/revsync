@@ -17,11 +17,17 @@ Now:
 
 - Make a file in your data dir called `idapythonrc.py` and append `import revsync`.
 - Put your nickname in `config.py`.
-- Probably restart IDA.
+- Restart IDA and look for revsync messages in the console.
+
+Expected data directory layout is this (Mac/Linux):
+```
+~/.idapro/idapythonrc.py
+~/.idapro/revsync/
+```
 
 Binary Ninja installation
 --------
 
 - Clone to your plugin dir (`Tools` menu -> `Open Plugin Folder`).
 - Put your nickname in `config.py`.
-- Probably restart Binary Ninja.
+- Restart Binary Ninja, and look for revsync messages in the console.
