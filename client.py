@@ -10,11 +10,11 @@ key_dec = {
     'u': 'user',
     't': 'text',
 }
-key_enc = {v: k for k, v in key_dec.items()}
+key_enc = dict((v, k) for k, v in key_dec.items())
 
 def decode(data):
     d = json.loads(data)
-    return {key_dec.get(k, k): v for k, v in d.items()}
+    return dict((key_dec.get(k, k), v) for k, v in d.items())
 
 def dtokey(d):
     return tuple(((k, v) for k, v in d.items() if k != 'user'))
