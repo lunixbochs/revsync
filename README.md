@@ -31,3 +31,6 @@ Binary Ninja installation
 - Clone to your plugin dir (`Tools` menu -> `Open Plugin Folder`).
 - Put your nickname in `config.py`.
 - Restart Binary Ninja, and look for revsync messages in the console.
+- Load your binary, and let Binary Ninja finish analysis.
+- Right click and select 'revsync: load'
+- Done!  Use 'revsync: comment' and 'revsync: rename symbol' from the right-click menu vice keyboard shortcuts (these currently circumvent revsync)
