@@ -29,6 +29,11 @@ def get_ea(addr):
 
 ### Redis Functions ###
 
+def onmsg_safe(key, data, replay=False):
+    def tmp():
+        onmsg(key, data, replay=replay)
+    idaapi.execute_sync(tmp, MFF_WRITE)
+
 def onmsg(key, data, replay=False):
     if key != fhash or key != get_fhash():
         print 'revsync: hash mismatch, dropping command'
@@ -99,7 +104,7 @@ def on_load():
         client.leave(fhash)
     fhash = get_fhash()
     print 'revsync: connecting with', fhash
-    client.join(fhash, onmsg)
+    client.join(fhash, onmsg_safe)
 
 def wait_for_analysis():
     global auto_wait
