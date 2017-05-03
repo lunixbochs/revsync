@@ -83,7 +83,7 @@ class Client:
         self.norecv[key].append(dtokey(data))
 
         data['user'] = self.nick
-        data = {key_enc.get(k, k): v for k, v in data.items()}
+        data = dict((key_enc.get(k, k), v) for k, v in data.items())
         data = json.dumps(data, separators=(',', ':'), sort_keys=True)
         if perm:
             self.r.rpush(key, data)
