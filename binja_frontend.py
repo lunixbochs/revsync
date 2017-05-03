@@ -8,7 +8,6 @@ def get_fhash(fname):
     with open(fname, 'rb') as f:
         return hashlib.sha256(f.read()).hexdigest().upper()
 
-fhash = None
 bv = None
 client = Client(**config)
 
@@ -43,11 +42,11 @@ def rename_symbol(addr, name):
     bv.define_user_symbol(sym)
 
 def publish(data):
-    if fhash == get_fhash(bv.file.filename):
-        client.publish(fhash, data)
+    if bv.session_data['fhash'] == get_fhash(bv.file.filename):
+        client.publish(bv.session_data['fhash'], data)
 
 def onmsg(key, data, replay=False):
-    if key != fhash:
+    if key != bv.session_data['fhash']:
         log_info('revsync: hash mismatch, dropping command')
         return
 
@@ -80,14 +79,13 @@ def revsync_rename(view, addr):
     rename_symbol(addr, name)
 
 def revsync_load(view):
-    global fhash
     global bv
-    if fhash:
-        client.leave(fhash)
+    if view.session_data.has_key('fhash'):
+        client.leave(view.session_data['fhash'])
     bv = view
-    fhash = get_fhash(bv.file.filename)
-    log_info('revsync: connecting with %s' % fhash)
-    client.join(fhash, onmsg)
+    bv.session_data['fhash'] = get_fhash(bv.file.filename)
+    log_info('revsync: connecting with %s' % bv.session_data['fhash'])
+    client.join(bv.session_data['fhash'], onmsg)
     log_info('revsync: connected!')
     interaction.show_message_box('revsync', 'revsync is now loaded!\nremember to use ' + 
         'the UI for commenting and renaming.', buttons=MessageBoxButtonSet.OKButtonSet)
