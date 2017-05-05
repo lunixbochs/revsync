@@ -1,6 +1,7 @@
 from binaryninja import *
 
 import hashlib
+from time import sleep
 from client import Client 
 from config import config
 
@@ -46,12 +47,14 @@ def onmsg(bv, key, data, replay):
     if key != bv.session_data['fhash']:
         log_info('revsync: hash mismatch, dropping command')
         return
-
     cmd, user = data['cmd'], data['user']
     if cmd == 'comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
         addr = get_ea(bv, int(data['addr']))
-        get_func_by_addr(bv, addr).set_comment(addr, data['text'])
+        func = get_func_by_addr(bv, addr)
+        # binja does not support comments on data symbols??? IDA does.
+        if func is not None:
+            func.set_comment(addr, data['text'])
     elif cmd == 'extra_comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
     elif cmd == 'area_comment':
@@ -80,6 +83,63 @@ def revsync_rename(bv, addr):
     publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name}) 
     rename_symbol(bv, addr, name)
 
+def revsync_loop(bv):
+    last_func = get_func_by_addr(bv, bv.offset)
+    last_comments = {} 
+    if last_func:
+        last_comments = last_func.comments
+    last_addr = bv.offset
+    last_addr_sym = bv.get_symbol_at(last_addr) 
+    while True:
+        if last_addr == bv.offset:
+            sleep(0.25)
+        else:
+            # gross, but here we go...
+            log_info('cursor position changed to %#x' % bv.offset)
+            # cursor position changed
+            sym = bv.get_symbol_at(last_addr)
+            if sym:
+                # was there a symbol before?
+                if last_addr_sym is None:
+                    # new symbol defined, publish
+                    log_info('new symbol at %#x: %s' % (last_addr, sym.name))
+                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, last_addr), 'text': sym.name}) 
+                else:
+                    # rename?
+                    if sym.name != last_addr_sym.name:
+                        # renamed symbol, publish 
+                        log_info('renamed symbol at %#x: %s' % (last_addr, sym.name))
+                        publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, last_addr), 'text': sym.name}) 
+            # were we just in a function?
+            if last_func:
+                comments = last_func.comments
+                if comments != last_comments:
+                    # check for changed comments
+                    for addr, text in comments.items():
+                        if last_comments is None:
+                            # no previous comment at that addr, publish
+                            log_info('changed comment: %#x, %s' % (addr, text))
+                            publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': text})
+                            continue
+                        elif last_comments.get(addr) != text:
+                            # changed comment, publish
+                            log_info('changed comment: %#x, %s' % (addr, text))
+                            publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': text})
+                    # check for removed comments
+                    if last_comments:
+                        removed = set(last_comments.keys()) - set(comments.keys())
+                        for addr in removed:
+                            log_info('removed comment: %#x' % addr)
+                            publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': ''})
+            # update current function/addr info
+            last_func = get_func_by_addr(bv, bv.offset)
+            if last_func:
+                last_comments = last_func.comments
+            else:
+                last_comments = {}
+            last_addr = bv.offset
+            last_addr_sym = bv.get_symbol_at(last_addr)
+
 def revsync_load(bv):
     if bv.session_data.has_key('client') and bv.session_data.has_key('fhash'):
         # close out the previous session
@@ -93,6 +153,9 @@ def revsync_load(bv):
     log_info('revsync: connected!')
     interaction.show_message_box('revsync', 'revsync is now loaded!\nremember to use ' + 
         'the UI for commenting and renaming.', buttons=MessageBoxButtonSet.OKButtonSet)
+    t = threading.Thread(target=revsync_loop, args=(bv,))
+    t.daemon = True
+    t.start()
 
 PluginCommand.register('revsync: load', 'load revsync!!!', revsync_load)
 PluginCommand.register_for_address('revsync: comment', 'revsync comment', revsync_comment)
