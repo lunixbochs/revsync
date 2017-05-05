@@ -33,4 +33,4 @@ Binary Ninja installation
 - Restart Binary Ninja, and look for revsync messages in the console.
 - Load your binary, and let Binary Ninja finish analysis.
 - Right click and select 'revsync: load'
-- Done!  Use 'revsync: comment' and 'revsync: rename symbol' from the right-click menu vice keyboard shortcuts (these currently circumvent revsync)
+- Done! 
