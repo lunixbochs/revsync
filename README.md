@@ -28,7 +28,7 @@ Expected data directory layout is this (Mac/Linux):
 Binary Ninja installation
 --------
 
-- Clone to your plugin dir (`Tools` menu -> `Open Plugin Folder`).
+- Clone to [your plugin folder](https://github.com/Vector35/binaryninja-api/tree/dev/python/examples#loading-plugins).
 - Put your nickname in `config.py`.
 - Restart Binary Ninja, and look for revsync messages in the console.
 - Load your binary, and let Binary Ninja finish analysis.
