@@ -6,6 +6,12 @@ import hashlib
 from client import Client
 from config import config
 
+ida_reserved_prefix = (
+    'sub_', 'locret_', 'loc_', 'off_', 'seg_', 'asc_', 'byte_', 'word_',
+    'dword_', 'qword_', 'byte3_', 'xmmword_', 'ymmword_', 'packreal_',
+    'flt_', 'dbl_', 'tbyte_', 'stru_', 'custdata_', 'algn_', 'unk_',
+)
+
 fhash = None
 auto_wait = False
 client = Client(**config)
@@ -66,7 +72,7 @@ def publish(data):
 
 class IDPHooks(IDP_Hooks):
     def renamed(self, ea, new_name, local_name):
-        if isLoaded(ea):
+        if isLoaded(ea) and not new_name.startswith(ida_reserved_prefix):
             publish({'cmd': 'rename', 'addr': get_can_addr(ea), 'text': new_name})
         return IDP_Hooks.renamed(self, ea, new_name, local_name)
 
