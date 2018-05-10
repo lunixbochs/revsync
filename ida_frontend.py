@@ -1,3 +1,4 @@
+import idaapi
 from idaapi import *
 from idc import *
 from idautils import *
