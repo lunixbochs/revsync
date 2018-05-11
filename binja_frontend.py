@@ -4,7 +4,8 @@ import hashlib
 from time import sleep
 from client import Client 
 from config import config
-from comments import cmt_data, NoChange
+from comments import NoChange
+from comments import comments as cmt_data
 
 def get_fhash(fname):
     with open(fname, 'rb') as f:
