@@ -164,10 +164,14 @@ def watch_cur_func(bv):
             last_addr = bv.offset
 
 def revsync_load(bv):
+    global client
+    try:
+        client
+    except:
+        client = Client(**config)
     if bv.session_data.has_key('client') and bv.session_data.has_key('fhash'):
         # close out the previous session
         bv.session_data['client'].leave(bv.session_data['fhash'])
-    client = Client(**config)
     fhash = get_fhash(bv.file.filename)
     bv.session_data['client'] = client 
     bv.session_data['fhash'] = fhash
