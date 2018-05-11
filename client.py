@@ -19,7 +19,7 @@ def decode(data):
     return dict((key_dec.get(k, k), v) for k, v in d.items())
 
 def dtokey(d):
-    return tuple(((k, v) for k, v in d.items() if k != 'user'))
+    return tuple(((k, v) for k, v in d.items() if k not in ('user', 'ts')))
 
 class Client:
     def __init__(self, host, port, nick, password=None):

@@ -83,21 +83,36 @@ def publish(data):
 
 ### IDA Hook Classes ###
 
+def on_renamed(ea, new_name, local_name):
+    if isLoaded(ea) and not new_name.startswith(ida_reserved_prefix):
+        publish({'cmd': 'rename', 'addr': get_can_addr(ea), 'text': new_name})
+
+def on_auto_empty_finally():
+    global auto_wait
+    if auto_wait:
+        auto_wait = False
+        on_load()
+
+# These IDPHooks methods are for pre-IDA 7
 class IDPHooks(IDP_Hooks):
     def renamed(self, ea, new_name, local_name):
-        if isLoaded(ea) and not new_name.startswith(ida_reserved_prefix):
-            publish({'cmd': 'rename', 'addr': get_can_addr(ea), 'text': new_name})
+        on_renamed(ea, new_name, local_name)
         return IDP_Hooks.renamed(self, ea, new_name, local_name)
 
     # TODO: make sure this is on 6.1
     def auto_empty_finally(self):
-        global auto_wait
-        if auto_wait:
-            auto_wait = False
-            on_load()
+        on_auto_empty_finally()
         return IDP_Hooks.auto_empty_finally(self)
 
 class IDBHooks(IDB_Hooks):
+    def renamed(self, ea, new_name, local_name):
+        on_renamed(ea, new_name, local_name)
+        return IDB_Hooks.renamed(self, ea, new_name, local_name)
+
+    def auto_empty_finally(self):
+        on_auto_empty_finally()
+        return IDB_Hooks.auto_empty_finally(self)
+
     def cmt_changed(self, ea, repeatable):
         cmt = GetCommentEx(ea, repeatable)
         try:
