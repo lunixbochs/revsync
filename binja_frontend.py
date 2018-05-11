@@ -49,13 +49,14 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: hash mismatch, dropping command')
         return
     cmd, user = data['cmd'], data['user']
+    ts = int(data.get('ts', 0))
     if cmd == 'comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
         addr = get_ea(bv, int(data['addr']))
         func = get_func_by_addr(bv, addr)
         # binja does not support comments on data symbols??? IDA does.
         if func is not None:
-            text = comments.set(addr, user, data['text'])
+            text = comments.set(addr, user, data['text'], ts)
             func.set_comment(addr, text)
     elif cmd == 'extra_comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
@@ -130,15 +131,21 @@ def watch_cur_func(bv):
                     for addr, text in comments.items():
                         if last_comments is None:
                             # no previous comment at that addr, publish
-                            changed = comments.parse_comment_update(ea, client.nick, text)
-                            log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
-                            publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
+                            try:
+                                changed = comments.parse_comment_update(ea, client.nick, text)
+                                log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
+                                publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
+                            except NoChange:
+                                pass
                             continue
                         elif last_comments.get(addr) != text:
                             # changed comment, publish
-                            changed = comments.parse_comment_update(ea, client.nick, text)
-                            log_info('resync: user changed comment: %#x, %s' % (addr, changed))
-                            publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
+                            try:
+                                changed = comments.parse_comment_update(ea, client.nick, text)
+                                log_info('resync: user changed comment: %#x, %s' % (addr, changed))
+                                publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
+                            except NoChange:
+                                pass
                     # check for removed comments
                     if last_comments:
                         removed = set(last_comments.keys()) - set(comments.keys())

@@ -9,6 +9,7 @@ class NoChange(Exception): pass
 class Comments:
     def __init__(self):
         self.comments = defaultdict(dict)
+        self.text = defaultdict(str)
         self.delimiter = '\x1f\n'
 
     def set(self, ea, user, cmt, timestamp):
@@ -16,15 +17,19 @@ class Comments:
             self.comments[ea][user] = (timestamp, user, cmt)
         else:
             self.comments[ea].pop(user, None)
-        return self.get_comment_at_addr(ea)
+        result = str(self.delimiter.join(
+            [''.join((fmtuser(user), cmt))
+             for _, user, cmt in
+             sorted(self.comments[ea].values())]))
+        self.text[ea] = result
+        return result
 
     def get_comment_at_addr(self, ea):
-        result = [''.join((fmtuser(user), cmt))
-                  for _, user, cmt in
-                  sorted(self.comments[ea].values())]
-        return self.delimiter.join(result)
+        return self.text[ea]
 
     def parse_comment_update(self, ea, user, cmt):
+        if not cmt: return ''
+        if cmt == self.text[ea]: raise NoChange
         f = fmtuser(user)
         for cmt in cmt.split(self.delimiter):
             if cmt.startswith(f):

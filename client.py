@@ -51,9 +51,26 @@ class Client:
                         self.nosend[key].append(dtokey(data))
                     cb(key, data)
                 elif item['type'] == 'subscribe':
+                    decoded = []
                     for data in self.r.lrange(key, 0, -1):
                         try:
-                            data = decode(data)
+                            decoded.append(decode(data))
+                        except Exception:
+                            print 'error decoding history', data
+                            traceback.print_exc()
+
+                    state = []
+                    dedup = set()
+                    for data in reversed(decoded):
+                        hashkey = tuple([str(data.get(k)) for k in ('cmd', 'user', 'addr')])
+                        if all(hashkey):
+                            if hashkey in dedup:
+                                continue
+                            dedup.add(hashkey)
+                        state.append(data)
+
+                    for data in reversed(state):
+                        try:
                             with self.nolock:
                                 self.nosend[key].append(dtokey(data))
                             cb(key, data, replay=True)
@@ -87,6 +104,7 @@ class Client:
         self.norecv[key].append(dtokey(data))
 
         data['user'] = self.nick
+        data['ts'] = self.r.time()[0]
         data = dict((key_enc.get(k, k), v) for k, v in data.items())
         data = json.dumps(data, separators=(',', ':'), sort_keys=True)
         if perm:

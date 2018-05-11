@@ -4,6 +4,8 @@ from idc import *
 from idautils import *
 
 import hashlib
+import traceback
+
 from client import Client
 from config import config
 from comments import comments, comments_extra, NoChange
@@ -39,7 +41,11 @@ def get_ea(addr):
 
 def onmsg_safe(key, data, replay=False):
     def tmp():
-        onmsg(key, data, replay=replay)
+        try:
+            onmsg(key, data, replay=replay)
+        except Exception as e:
+            print('error during callback for %s: %s' % (data.get('cmd'), e))
+            traceback.print_exc()
     idaapi.execute_sync(tmp, MFF_WRITE)
 
 def onmsg(key, data, replay=False):
@@ -49,15 +55,16 @@ def onmsg(key, data, replay=False):
 
     if 'addr' in data:
         ea = get_ea(data['addr'])
+    ts = int(data.get('ts', 0))
     cmd, user = data['cmd'], data['user']
     if cmd == 'comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        text = comments.set(ea, user, str(data['text']))
+        text = comments.set(ea, user, str(data['text']), ts)
         MakeComm(ea, text)
     elif cmd == 'extra_comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        text = comments_extra.set(ea, user, str(data['text']))
-        MakeRptComm(ea, text)
+        text = comments_extra.set(ea, user, str(data['text']), ts)
+        MakeRptCmt(ea, text)
     elif cmd == 'area_comment':
         print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
     elif cmd == 'rename':
@@ -92,8 +99,8 @@ class IDPHooks(IDP_Hooks):
 
 class IDBHooks(IDB_Hooks):
     def cmt_changed(self, ea, repeatable):
+        cmt = GetCommentEx(ea, repeatable)
         try:
-            cmt = GetCommentEx(ea, repeatable)
             changed = comments.parse_comment_update(ea, client.nick, cmt)
             publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': changed or ''})
         except NoChange:
