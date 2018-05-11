@@ -133,18 +133,20 @@ def watch_cur_func(bv):
                         if last_comments is None:
                             # no previous comment at that addr, publish
                             try:
-                                changed = cmt_data.parse_comment_update(ea, client.nick, text)
+                                addr = get_can_addr(bv, addr)
+                                changed = cmt_data.parse_comment_update(addr, client.nick, text)
                                 log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
-                                publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
+                                publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
                             except NoChange:
                                 pass
                             continue
                         elif last_comments.get(addr) != text:
                             # changed comment, publish
                             try:
-                                changed = cmt_data.parse_comment_update(ea, client.nick, text)
+                                addr = get_can_addr(bv, addr)
+                                changed = cmt_data.parse_comment_update(addr, client.nick, text)
                                 log_info('resync: user changed comment: %#x, %s' % (addr, changed))
-                                publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
+                                publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
                             except NoChange:
                                 pass
                     # check for removed comments
