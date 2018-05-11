@@ -4,7 +4,7 @@ import hashlib
 from time import sleep
 from client import Client 
 from config import config
-from comments import comments, NoChange
+from comments import cmt_data, NoChange
 
 def get_fhash(fname):
     with open(fname, 'rb') as f:
@@ -56,7 +56,7 @@ def onmsg(bv, key, data, replay):
         func = get_func_by_addr(bv, addr)
         # binja does not support comments on data symbols??? IDA does.
         if func is not None:
-            text = comments.set(addr, user, data['text'], ts)
+            text = cmt_data.set(addr, user, data['text'], ts)
             func.set_comment(addr, text)
     elif cmd == 'extra_comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
@@ -132,7 +132,7 @@ def watch_cur_func(bv):
                         if last_comments is None:
                             # no previous comment at that addr, publish
                             try:
-                                changed = comments.parse_comment_update(ea, client.nick, text)
+                                changed = cmt_data.parse_comment_update(ea, client.nick, text)
                                 log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
                                 publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
                             except NoChange:
@@ -141,7 +141,7 @@ def watch_cur_func(bv):
                         elif last_comments.get(addr) != text:
                             # changed comment, publish
                             try:
-                                changed = comments.parse_comment_update(ea, client.nick, text)
+                                changed = cmt_data.parse_comment_update(ea, client.nick, text)
                                 log_info('resync: user changed comment: %#x, %s' % (addr, changed))
                                 publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': changed})
                             except NoChange:
