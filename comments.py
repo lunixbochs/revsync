@@ -1,38 +1,90 @@
 from collections import defaultdict
 from difflib import Differ
 
+def fmtuser(user):
+    return '[{}] '.format(user)
+
+class NoChange(Exception): pass
+
 class Comments:
     def __init__(self):
-        self.comments = defaultdict(list)
+        self.comments = defaultdict(dict)
         self.delimiter = '\x1f\n'
 
-    def add(self, ea, user, cmt, timestamp):
-        # Remove old comment by user
-        curr_cmt_index = [i for (i, (_, u, _)) in enumerate(self.comments[ea]) if u == user]
-        if curr_cmt_index:
-            self.comments[ea].pop(curr_cmt_index[0])
-
-        # Add new comment by user
-        self.comments[ea].append((timestamp, user, cmt))
+    def set(self, ea, user, cmt, timestamp):
+        if cmt.strip():
+            self.comments[ea][user] = (timestamp, user, cmt)
+        else:
+            self.comments[ea].pop(user, None)
+        return self.get_comment_at_addr(ea)
 
     def get_comment_at_addr(self, ea):
-        result = []
-        for _, user, cmt in sorted(self.comments[ea]):
-            result.append('[{}]\n{}'.format(user, cmt))
+        result = [''.join((fmtuser(user), cmt))
+                  for _, user, cmt in
+                  sorted(self.comments[ea].values())]
         return self.delimiter.join(result)
 
-    def get_comment_by_user(self, cmt, user):
-        if not cmt:
-            return ''
-
-        curr_cmt = [x for x in cmt.split(self.delimiter) if user in x]
-        if curr_cmt:
-            curr_cmt = curr_cmt[0].replace('[{}]\n'.format(user), '')
-            return curr_cmt
-        if self.delimiter not in cmt:
-            return cmt
+    def parse_comment_update(self, ea, user, cmt):
+        f = fmtuser(user)
+        for cmt in cmt.split(self.delimiter):
+            if cmt.startswith(f):
+                 new = cmt.split('] ', 1)[1]
+                 break
         else:
             # Assume new comments are always appended
-            return cmt.split(self.delimiter)[-1]
+            new = cmt.split(self.delimiter)[-1]
+        old = self.comments[ea].get(user)
+        if old:
+            _, _, old = old
+            if old.strip() == new.strip():
+                raise NoChange
+        return new
 
 comments = Comments()
+comments_extra = Comments()
+
+if __name__ == '__main__':
+    ts = 1
+    def add(addr, user, comment):
+        global ts
+        ts += 1
+        print '[+] {:#x} [{}] {}'.format(addr, user, comment)
+        comments.set(addr, user, comment, ts)
+        print 'Comment at {:#x}:\n{}'.format(addr, comments.get_comment_at_addr(addr))
+        print
+
+    ea = 0x1000
+    add(ea, 'alice', 'hello from alice')
+    add(ea, 'bob', 'hello from bob')
+    add(ea, 'alice', 'update from alice')
+
+    text = comments.get_comment_at_addr(ea)
+    print '-'*40
+    split = text.split(comments.delimiter)
+    for i, line in enumerate(split):
+        if fmtuser('alice') in line:
+            split[i] += ' added stuff'
+            update = comments.delimiter.join(split)
+            print '[-] update:\n{}'.format(update)
+            changed = comments.parse_comment_update(ea, 'alice', update)
+            print '[-] changed text:\n{}'.format(changed)
+            print '[-] set:'
+            add(ea, 'alice', changed)
+            break
+
+    print '-'*40
+    changed = comments.parse_comment_update(ea, 'alice', 'replaced all text')
+    add(ea, 'alice', changed)
+
+    print '-'*40
+    try:
+        text = comments.get_comment_at_addr(ea)
+        comments.parse_comment_update(ea, 'alice', text)
+        print '[!] oh no, change detected!'
+    except NoChange:
+        print '[+] no change detected'
+
+    print '-'*40
+    print 'empty update:', repr(comments.parse_comment_update(ea, 'alice', ''))
+
+    print

@@ -6,7 +6,7 @@ from idautils import *
 import hashlib
 from client import Client
 from config import config
-from comments import comments
+from comments import comments, comments_extra, NoChange
 
 ida_reserved_prefix = (
     'sub_', 'locret_', 'loc_', 'off_', 'seg_', 'asc_', 'byte_', 'word_',
@@ -47,20 +47,22 @@ def onmsg(key, data, replay=False):
         print 'revsync: hash mismatch, dropping command'
         return
 
+    if 'addr' in data:
+        ea = get_ea(data['addr'])
     cmd, user = data['cmd'], data['user']
     if cmd == 'comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        comment_addr = get_ea(data['addr'])
-        curr_comment = comments.get_comment_at_addr(comment_addr)
-        MakeComm(get_ea(data['addr']), curr_comment)
+        text = comments.set(ea, user, str(data['text']))
+        MakeComm(ea, text)
     elif cmd == 'extra_comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        MakeRptComm(get_ea(data['addr']), str(data['text']))
+        text = comments_extra.set(ea, user, str(data['text']))
+        MakeRptComm(ea, text)
     elif cmd == 'area_comment':
         print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
     elif cmd == 'rename':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        MakeName(get_ea(data['addr']), str(data['text']))
+        MakeName(ea, str(data['text']))
     elif cmd == 'join':
         print 'revsync: <%s> joined' % (user)
     else:
@@ -90,21 +92,21 @@ class IDPHooks(IDP_Hooks):
 
 class IDBHooks(IDB_Hooks):
     def cmt_changed(self, ea, repeatable):
-        cmt = GetCommentEx(ea, repeatable)
-        user = config['nick']
-        curr_cmt = comments.get_comment_by_user(cmt, user)
-        stored_cmt = comments.get_comment_at_addr(ea)
-        if cmt != stored_cmt:
-            stored_cmt_user = comments.get_comment_by_user(stored_cmt, user)
-            comments.add(ea, user, curr_cmt, int(time.time()))
-            publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': stored_cmt_user or ''})
-            return IDB_Hooks.cmt_changed(self, ea, repeatable)
-
-        return 0
+        try:
+            cmt = GetCommentEx(ea, repeatable)
+            changed = comments.parse_comment_update(ea, client.nick, cmt)
+            publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': changed or ''})
+        except NoChange:
+            pass
+        return IDB_Hooks.cmt_changed(self, ea, repeatable)
 
     def extra_cmt_changed(self, ea, line_idx, repeatable):
-        cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': cmt or ''})
+        try:
+            cmt = GetCommentEx(ea, repeatable)
+            changed = comments_extra.parse_comment_update(ea, client.nick, cmt)
+            publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': changed or ''})
+        except NoChange:
+            pass
         return IDB_Hooks.extra_cmt_changed(self, ea, line_idx, repeatable)
 
     def area_cmt_changed(self, cb, a, cmt, repeatable):

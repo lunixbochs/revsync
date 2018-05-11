@@ -1,5 +1,6 @@
 from collections import defaultdict
 import json
+import re
 import redis
 import threading
 import traceback
@@ -11,6 +12,7 @@ key_dec = {
     't': 'text',
 }
 key_enc = dict((v, k) for k, v in key_dec.items())
+nick_filter = re.compile(r'[^a-zA-Z0-9_\-]')
 
 def decode(data):
     d = json.loads(data)
@@ -22,7 +24,7 @@ def dtokey(d):
 class Client:
     def __init__(self, host, port, nick, password=None):
         self.r = redis.StrictRedis(host=host, port=port, password=password)
-        self.nick = nick
+        self.nick = nick_filter.sub('_', nick)
         self.ps = {}
         self.nolock = threading.Lock()
         self.nosend = defaultdict(list)
@@ -41,6 +43,8 @@ class Client:
             try:
                 if item['type'] == 'message':
                     data = decode(item['data'])
+                    if 'user' in data:
+                        data['user'] = nick_filter.sub('_', data['user'])
                     if self.debounce(self.norecv[key], data):
                         continue
                     with self.nolock:
