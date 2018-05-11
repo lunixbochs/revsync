@@ -6,6 +6,7 @@ from idautils import *
 import hashlib
 from client import Client
 from config import config
+from comments import comments
 
 ida_reserved_prefix = (
     'sub_', 'locret_', 'loc_', 'off_', 'seg_', 'asc_', 'byte_', 'word_',
@@ -49,7 +50,9 @@ def onmsg(key, data, replay=False):
     cmd, user = data['cmd'], data['user']
     if cmd == 'comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        MakeComm(get_ea(data['addr']), str(data['text']))
+        comment_addr = get_ea(data['addr'])
+        curr_comment = comments.get_comment_at_addr(comment_addr)
+        MakeComm(get_ea(data['addr']), curr_comment)
     elif cmd == 'extra_comment':
         print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
         MakeRptComm(get_ea(data['addr']), str(data['text']))
@@ -88,8 +91,16 @@ class IDPHooks(IDP_Hooks):
 class IDBHooks(IDB_Hooks):
     def cmt_changed(self, ea, repeatable):
         cmt = GetCommentEx(ea, repeatable)
-        publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': cmt or ''})
-        return IDB_Hooks.cmt_changed(self, ea, repeatable)
+        user = config['nick']
+        curr_cmt = comments.get_comment_by_user(cmt, user)
+        stored_cmt = comments.get_comment_at_addr(ea)
+        if cmt != stored_cmt:
+            stored_cmt_user = comments.get_comment_by_user(stored_cmt, user)
+            comments.add(ea, user, curr_cmt, int(time.time()))
+            publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': stored_cmt_user or ''})
+            return IDB_Hooks.cmt_changed(self, ea, repeatable)
+
+        return 0
 
     def extra_cmt_changed(self, ea, line_idx, repeatable):
         cmt = GetCommentEx(ea, repeatable)
