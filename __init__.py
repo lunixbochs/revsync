@@ -2,7 +2,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 
-from config import config
+import config
+config = config.config
 good = False
 
 try:
