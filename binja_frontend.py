@@ -1,8 +1,10 @@
-from binaryninja import *
-
 import hashlib
 from time import sleep
-from client import Client 
+
+from binaryninja import *
+from binaryninja.plugin import PluginCommand
+
+from client import Client
 from config import config
 from comments import NoChange
 from comments import comments as cmt_data
@@ -27,14 +29,14 @@ def rename_symbol(bv, addr, name):
     sym = bv.get_symbol_at(addr)
     if sym is not None:
         # symbol already exists for this address
-        if sym.auto == True:
+        if sym.auto is True:
             bv.undefine_auto_symbol(sym)
         else:
             bv.undefine_user_symbol(sym)
     # is it a function?
     func = get_func_by_addr(bv, addr)
     if func is not None:
-        # function 
+        # function
         sym = types.Symbol(SymbolType.FunctionSymbol, addr, name)
     else:
         # data
@@ -84,7 +86,7 @@ def revsync_comment(bv, addr):
 
 def revsync_rename(bv, addr):
     name = interaction.get_text_line_input('Enter symbol name: ', 'revsync rename')
-    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name}) 
+    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
     rename_symbol(bv, addr, name)
 
 def watch_syms(bv, sym_type):
@@ -93,12 +95,12 @@ def watch_syms(bv, sym_type):
         # comes as list of Symbols
         syms = bv.get_symbols_of_type(sym_type)
         # turn our list into dict of addr => sym name
-        syms_dict = dict() 
+        syms_dict = dict()
         for sym in syms:
             syms_dict[sym.address] = sym.name
         return syms_dict
 
-    last_syms = get_syms() 
+    last_syms = get_syms()
     while True:
         syms = get_syms()
         if syms != last_syms:
@@ -106,7 +108,7 @@ def watch_syms(bv, sym_type):
                 if last_syms.get(addr) != name:
                     # name changed, publish
                     log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
-                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name}) 
+                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
         last_syms = syms
         sleep(0.5)
 
@@ -115,8 +117,8 @@ def watch_cur_func(bv):
     def get_cur_func():
         return get_func_by_addr(bv, bv.offset)
 
-    last_func = get_cur_func() 
-    last_comments = {} 
+    last_func = get_cur_func()
+    last_comments = {}
     if last_func:
         last_comments = last_func.comments
     last_addr = bv.offset
@@ -163,6 +165,7 @@ def watch_cur_func(bv):
                 last_comments = {}
             last_addr = bv.offset
 
+
 def revsync_load(bv):
     global client
     try:
@@ -173,7 +176,7 @@ def revsync_load(bv):
         # close out the previous session
         bv.session_data['client'].leave(bv.session_data['fhash'])
     fhash = get_fhash(bv.file.filename)
-    bv.session_data['client'] = client 
+    bv.session_data['client'] = client
     bv.session_data['fhash'] = fhash
     log_info('revsync: connecting with %s' % fhash)
     client.join(fhash, revsync_callback(bv))
