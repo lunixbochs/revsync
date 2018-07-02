@@ -62,7 +62,7 @@ class Client:
                     state = []
                     dedup = set()
                     for data in reversed(decoded):
-                        hashkey = tuple([str(data.get(k)) for k in ('cmd', 'user', 'addr')])
+                        hashkey = tuple([str(data.get(k)) for k in ('cmd', 'user', 'addr', 'offset')])
                         if all(hashkey):
                             if hashkey in dedup:
                                 continue
