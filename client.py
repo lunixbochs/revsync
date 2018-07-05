@@ -6,6 +6,13 @@ import threading
 import traceback
 import uuid
 
+hash_keys = ('cmd', 'user')
+cmd_hash_keys = {
+    'comment': ('addr',),
+    'extra_comment': ('addr',),
+    'area_comment': ('addr',),
+    'rename': ('addr',),
+}
 key_dec = {
     'c': 'cmd',
     'a': 'addr',
@@ -49,7 +56,6 @@ class Client:
                         data['user'] = nick_filter.sub('_', data['user'])
                     # reject our own messages
                     if data.get('uuid') == self.uuid:
-                        print('skipping message', data)
                         continue
                     with self.nolock:
                         self.nosend[key].append(dtokey(data))
@@ -66,11 +72,14 @@ class Client:
                     state = []
                     dedup = set()
                     for data in reversed(decoded):
-                        hashkey = tuple([str(data.get(k)) for k in ('cmd', 'user', 'addr')])
-                        if all(hashkey):
-                            if hashkey in dedup:
-                                continue
-                            dedup.add(hashkey)
+                        cmd = data.get('cmd')
+                        if cmd:
+                            keys = hash_keys + cmd_hash_keys.get(cmd, ())
+                            hashkey = tuple([str(data.get(k)) for k in keys])
+                            if all(hashkey):
+                                if hashkey in dedup:
+                                    continue
+                                dedup.add(hashkey)
                         state.append(data)
 
                     for data in reversed(state):
