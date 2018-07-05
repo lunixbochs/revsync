@@ -43,9 +43,9 @@ def rename_symbol(bv, addr, name):
         sym = types.Symbol(SymbolType.DataSymbol, addr, name)
     bv.define_user_symbol(sym)
 
-def publish(bv, data):
+def publish(bv, data, **kwargs):
     if bv.session_data['fhash'] == get_fhash(bv.file.filename):
-        bv.session_data['client'].publish(bv.session_data['fhash'], data)
+        bv.session_data['client'].publish(bv.session_data['fhash'], data, **kwargs)
 
 def onmsg(bv, key, data, replay):
     if key != bv.session_data['fhash']:
@@ -81,7 +81,7 @@ def revsync_callback(bv):
 
 def revsync_comment(bv, addr):
     comment = interaction.get_text_line_input('Enter comment: ', 'revsync comment')
-    publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': comment or ''})
+    publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': comment or ''}, send_uuid=False)
     get_func_by_addr(bv, addr).set_comment(addr, comment)
 
 def revsync_rename(bv, addr):

@@ -111,13 +111,14 @@ class Client:
         if ps:
             ps.unsubscribe(key)
 
-    def publish(self, key, data, perm=True):
+    def publish(self, key, data, perm=True, send_uuid=True):
         if self.debounce(self.nosend[key], data):
             return
 
         data['user'] = self.nick
         data['ts'] = self.r.time()[0]
-        data['uuid'] = self.uuid
+        if send_uuid:
+            data['uuid'] = self.uuid
         data = dict((key_enc.get(k, k), v) for k, v in data.items())
         data = json.dumps(data, separators=(',', ':'), sort_keys=True)
         if perm:

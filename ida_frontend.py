@@ -75,11 +75,11 @@ def onmsg(key, data, replay=False):
     else:
         print 'revsync: unknown cmd', data
 
-def publish(data):
+def publish(data, **kwargs):
     if not autoIsOk():
         return
     if fhash == get_fhash():
-        client.publish(fhash, data)
+        client.publish(fhash, data, **kwargs)
 
 ### IDA Hook Classes ###
 
@@ -117,7 +117,7 @@ class IDBHooks(IDB_Hooks):
         cmt = GetCommentEx(ea, repeatable)
         try:
             changed = comments.parse_comment_update(ea, client.nick, cmt)
-            publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': changed or ''})
+            publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': changed or ''}, send_uuid=False)
         except NoChange:
             pass
         return IDB_Hooks.cmt_changed(self, ea, repeatable)
@@ -126,13 +126,13 @@ class IDBHooks(IDB_Hooks):
         try:
             cmt = GetCommentEx(ea, repeatable)
             changed = comments_extra.parse_comment_update(ea, client.nick, cmt)
-            publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': changed or ''})
+            publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': changed or ''}, send_uuid=False)
         except NoChange:
             pass
         return IDB_Hooks.extra_cmt_changed(self, ea, line_idx, repeatable)
 
     def area_cmt_changed(self, cb, a, cmt, repeatable):
-        publish({'cmd': 'area_comment', 'range': [get_can_addr(a.startEA), get_can_addr(a.endEA)], 'text': cmt or ''})
+        publish({'cmd': 'area_comment', 'range': [get_can_addr(a.startEA), get_can_addr(a.endEA)], 'text': cmt or ''}, send_uuid=False)
         return IDB_Hooks.area_cmt_changed(self, cb, a, cmt, repeatable)
 
 class UIHooks(UI_Hooks):
