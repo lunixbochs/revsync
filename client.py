@@ -4,12 +4,14 @@ import re
 import redis
 import threading
 import traceback
+import uuid
 
 key_dec = {
     'c': 'cmd',
     'a': 'addr',
     'u': 'user',
     't': 'text',
+    'i': 'uuid',
 }
 key_enc = dict((v, k) for k, v in key_dec.items())
 nick_filter = re.compile(r'[^a-zA-Z0-9_\-]')
@@ -28,7 +30,7 @@ class Client:
         self.ps = {}
         self.nolock = threading.Lock()
         self.nosend = defaultdict(list)
-        self.norecv = defaultdict(list)
+        self.uuid = uuid.uuid4().hex.decode('hex').encode('base64').strip()
 
     def debounce(self, no, data):
         dkey = dtokey(data)
@@ -45,7 +47,9 @@ class Client:
                     data = decode(item['data'])
                     if 'user' in data:
                         data['user'] = nick_filter.sub('_', data['user'])
-                    if self.debounce(self.norecv[key], data):
+                    # reject our own messages
+                    if data.get('uuid') == self.uuid:
+                        print('skipping message', data)
                         continue
                     with self.nolock:
                         self.nosend[key].append(dtokey(data))
@@ -101,12 +105,12 @@ class Client:
     def publish(self, key, data, perm=True):
         if self.debounce(self.nosend[key], data):
             return
-        self.norecv[key].append(dtokey(data))
 
         data['user'] = self.nick
         data['ts'] = self.r.time()[0]
+        data['uuid'] = self.uuid
         data = dict((key_enc.get(k, k), v) for k, v in data.items())
         data = json.dumps(data, separators=(',', ':'), sort_keys=True)
         if perm:
-            self.r.rpush(key, data)
+            self.r.rpush(key, dump)
         self.r.publish(key, data)
