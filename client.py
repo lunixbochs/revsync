@@ -112,5 +112,5 @@ class Client:
         data = dict((key_enc.get(k, k), v) for k, v in data.items())
         data = json.dumps(data, separators=(',', ':'), sort_keys=True)
         if perm:
-            self.r.rpush(key, dump)
+            self.r.rpush(key, data)
         self.r.publish(key, data)
