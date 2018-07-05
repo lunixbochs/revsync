@@ -53,10 +53,10 @@ if __name__ == '__main__':
     def add(addr, user, comment):
         global ts
         ts += 1
-        print '[+] {:#x} [{}] {}'.format(addr, user, comment)
+        print('[+] {:#x} [{}] {}'.format(addr, user, comment))
         comments.set(addr, user, comment, ts)
-        print 'Comment at {:#x}:\n{}'.format(addr, comments.get_comment_at_addr(addr))
-        print
+        print('Comment at {:#x}:\n{}'.format(addr, comments.get_comment_at_addr(addr)))
+        print()
 
     ea = 0x1000
     add(ea, 'alice', 'hello from alice')
@@ -64,32 +64,32 @@ if __name__ == '__main__':
     add(ea, 'alice', 'update from alice')
 
     text = comments.get_comment_at_addr(ea)
-    print '-'*40
+    print('-'*40)
     split = text.split(comments.delimiter)
     for i, line in enumerate(split):
         if fmtuser('alice') in line:
             split[i] += ' added stuff'
             update = comments.delimiter.join(split)
-            print '[-] update:\n{}'.format(update)
+            print('[-] update:\n{}'.format(update))
             changed = comments.parse_comment_update(ea, 'alice', update)
-            print '[-] changed text:\n{}'.format(changed)
-            print '[-] set:'
+            print('[-] changed text:\n{}'.format(changed))
+            print('[-] set:')
             add(ea, 'alice', changed)
             break
 
-    print '-'*40
+    print('-'*40)
     changed = comments.parse_comment_update(ea, 'alice', 'replaced all text')
     add(ea, 'alice', changed)
 
-    print '-'*40
+    print('-'*40)
     try:
         text = comments.get_comment_at_addr(ea)
         comments.parse_comment_update(ea, 'alice', text)
-        print '[!] oh no, change detected!'
+        print('[!] oh no, change detected!')
     except NoChange:
-        print '[+] no change detected'
+        print('[+] no change detected')
 
-    print '-'*40
-    print 'empty update:', repr(comments.parse_comment_update(ea, 'alice', ''))
+    print('-'*40)
+    print('empty update:', repr(comments.parse_comment_update(ea, 'alice', '')))
 
     print

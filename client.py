@@ -60,7 +60,7 @@ class Client:
                         try:
                             decoded.append(decode(data))
                         except Exception:
-                            print 'error decoding history', data
+                            print('error decoding history', data)
                             traceback.print_exc()
 
                     state = []
@@ -79,12 +79,12 @@ class Client:
                                 self.nosend[key].append(dtokey(data))
                             cb(key, data, replay=True)
                         except Exception:
-                            print 'error replaying history', data
+                            print('error replaying history', data)
                             traceback.print_exc()
                 else:
-                    print 'unknown redis push', item
+                    print('unknown redis push', item)
             except Exception:
-                print 'error processing item', item
+                print('error processing item', item)
                 traceback.print_exc()
 
     def join(self, key, cb):

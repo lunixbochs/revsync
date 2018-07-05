@@ -20,4 +20,4 @@ except ImportError:
     pass
 
 if not good:
-    print 'Warning: both IDA and Binary Ninja plugin API imports failed'
+    print('Warning: both IDA and Binary Ninja plugin API imports failed')
