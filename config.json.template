@@ -1,0 +1,6 @@
+{
+    "host": "hostname",
+    "port": 6379,
+    "password": "password",
+    "nick": "changeme"
+}
