@@ -90,8 +90,12 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
         addr = get_ea(bv, int(data['addr']))
         rename_symbol(bv, addr, data['text'])
-    elif cmd == 'stackvar':
-        log_info('revsync: <%s> %s %s %#x %s' % (user, cmd, data['func_name'], data['offset'], data['name']))
+    elif cmd == 'stackvar_renamed':
+        func_name = '???'
+        func = get_func_by_addr(bv, data['addr'])
+        if func:
+            func_name = func.name
+        log_info('revsync: <%s> %s %s %#x %s' % (user, cmd, func_name, data['offset'], data['name']))
         rename_stackvar(bv, data['addr'], data['offset'], data['name'])
     elif cmd == 'join':
         log_info('revsync: <%s> joined' % (user))
@@ -196,7 +200,7 @@ def watch_cur_func(bv):
                             if old_name != cur_name:
                                 # stack var name changed, publish
                                 log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, cur_name))
-                                publish(bv, {'cmd': 'stackvar', 'addr': last_func.start, 'func_name': last_func.name, 'offset': offset, 'name': cur_name})
+                                publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': cur_name})
 
             # update current function/addr info
             last_func = get_cur_func()
