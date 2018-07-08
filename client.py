@@ -4,12 +4,21 @@ import re
 import redis
 import threading
 import traceback
+import uuid
 
+hash_keys = ('cmd', 'user')
+cmd_hash_keys = {
+    'comment': ('addr',),
+    'extra_comment': ('addr',),
+    'area_comment': ('addr',),
+    'rename': ('addr',),
+}
 key_dec = {
     'c': 'cmd',
     'a': 'addr',
     'u': 'user',
     't': 'text',
+    'i': 'uuid',
 }
 key_enc = dict((v, k) for k, v in key_dec.items())
 nick_filter = re.compile(r'[^a-zA-Z0-9_\-]')
@@ -28,7 +37,7 @@ class Client:
         self.ps = {}
         self.nolock = threading.Lock()
         self.nosend = defaultdict(list)
-        self.norecv = defaultdict(list)
+        self.uuid = uuid.uuid4().hex.decode('hex').encode('base64').strip()
 
     def debounce(self, no, data):
         dkey = dtokey(data)
@@ -45,7 +54,8 @@ class Client:
                     data = decode(item['data'])
                     if 'user' in data:
                         data['user'] = nick_filter.sub('_', data['user'])
-                    if self.debounce(self.norecv[key], data):
+                    # reject our own messages
+                    if data.get('uuid') == self.uuid:
                         continue
                     with self.nolock:
                         self.nosend[key].append(dtokey(data))
@@ -56,17 +66,20 @@ class Client:
                         try:
                             decoded.append(decode(data))
                         except Exception:
-                            print 'error decoding history', data
+                            print('error decoding history', data)
                             traceback.print_exc()
 
                     state = []
                     dedup = set()
                     for data in reversed(decoded):
-                        hashkey = tuple([str(data.get(k)) for k in ('cmd', 'user', 'addr', 'offset')])
-                        if all(hashkey):
-                            if hashkey in dedup:
-                                continue
-                            dedup.add(hashkey)
+                        cmd = data.get('cmd')
+                        if cmd:
+                            keys = hash_keys + cmd_hash_keys.get(cmd, ())
+                            hashkey = tuple([str(data.get(k)) for k in keys])
+                            if all(hashkey):
+                                if hashkey in dedup:
+                                    continue
+                                dedup.add(hashkey)
                         state.append(data)
 
                     for data in reversed(state):
@@ -75,12 +88,12 @@ class Client:
                                 self.nosend[key].append(dtokey(data))
                             cb(key, data, replay=True)
                         except Exception:
-                            print 'error replaying history', data
+                            print('error replaying history', data)
                             traceback.print_exc()
                 else:
-                    print 'unknown redis push', item
+                    print('unknown redis push', item)
             except Exception:
-                print 'error processing item', item
+                print('error processing item', item)
                 traceback.print_exc()
 
     def join(self, key, cb):
@@ -98,13 +111,14 @@ class Client:
         if ps:
             ps.unsubscribe(key)
 
-    def publish(self, key, data, perm=True):
+    def publish(self, key, data, perm=True, send_uuid=True):
         if self.debounce(self.nosend[key], data):
             return
-        self.norecv[key].append(dtokey(data))
 
         data['user'] = self.nick
         data['ts'] = self.r.time()[0]
+        if send_uuid:
+            data['uuid'] = self.uuid
         data = dict((key_enc.get(k, k), v) for k, v in data.items())
         data = json.dumps(data, separators=(',', ':'), sort_keys=True)
         if perm:
