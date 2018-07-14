@@ -12,6 +12,7 @@ cmd_hash_keys = {
     'extra_comment': ('addr',),
     'area_comment': ('addr',),
     'rename': ('addr',),
+    'stackvar_renamed': ('addr', 'offset', 'name',)
 }
 key_dec = {
     'c': 'cmd',
