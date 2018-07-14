@@ -25,6 +25,12 @@ def get_func_by_addr(bv, addr):
         return bb[0].function
     return None
 
+def stack_dict_from_list(stackvars):
+    d = {}
+    for var in stackvars:
+        d[var.storage] = (var.name, var.type)
+    return d
+
 def rename_symbol(bv, addr, name):
     sym = bv.get_symbol_at(addr)
     if sym is not None:
@@ -42,6 +48,21 @@ def rename_symbol(bv, addr, name):
         # data
         sym = types.Symbol(SymbolType.DataSymbol, addr, name)
     bv.define_user_symbol(sym)
+
+def rename_stackvar(bv, func_addr, offset, name):
+    func = get_func_by_addr(bv, func_addr)
+    if func is None:
+        log_info('revsync: bad func addr %#x during rename_stackvar' % func_addr)
+        return
+    # we need to figure out the variable type before renaming
+    stackvars = stack_dict_from_list(func.vars)
+    var = stackvars.get(offset)
+    if var is None:
+        log_info('revsync: could not locate stack var with offset %#x during rename_stackvar' % offset)
+        return
+    var_name, var_type = var
+    func.create_user_stack_var(offset, var_type, name)
+    return
 
 def publish(bv, data, **kwargs):
     if bv.session_data['fhash'] == get_fhash(bv.file.filename):
@@ -69,6 +90,13 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
         addr = get_ea(bv, int(data['addr']))
         rename_symbol(bv, addr, data['text'])
+    elif cmd == 'stackvar_renamed':
+        func_name = '???'
+        func = get_func_by_addr(bv, data['addr'])
+        if func:
+            func_name = func.name
+        log_info('revsync: <%s> %s %s %#x %s' % (user, cmd, func_name, data['offset'], data['name']))
+        rename_stackvar(bv, data['addr'], data['offset'], data['name'])
     elif cmd == 'join':
         log_info('revsync: <%s> joined' % (user))
     else:
@@ -119,8 +147,10 @@ def watch_cur_func(bv):
 
     last_func = get_cur_func()
     last_comments = {}
+    last_stackvars = {} 
     if last_func:
         last_comments = last_func.comments
+        last_stackvars = stack_dict_from_list(last_func.vars)
     last_addr = bv.offset
     while True:
         if last_addr == bv.offset:
@@ -157,12 +187,29 @@ def watch_cur_func(bv):
                         for addr in removed:
                             log_info('revsync: user removed comment: %#x' % addr)
                             publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': ''})
+
+                # similar dance, but with stackvars 
+                stackvars = stack_dict_from_list(last_func.vars)
+                if stackvars != last_stackvars:
+                    # check for changed stack var names
+                    for offset, data in stackvars.items():
+                        old_data = last_stackvars.get(offset)
+                        if old_data != data:
+                            cur_name, cur_type = data
+                            old_name, old_type = old_data
+                            if old_name != cur_name:
+                                # stack var name changed, publish
+                                log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, cur_name))
+                                publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': cur_name})
+
             # update current function/addr info
             last_func = get_cur_func()
             if last_func:
                 last_comments = last_func.comments
+                last_stackvars = stack_dict_from_list(last_func.vars)
             else:
                 last_comments = {}
+                last_stackvars = {} 
             last_addr = bv.offset
 
 
