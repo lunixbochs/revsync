@@ -8,6 +8,7 @@ good = False
 try:
     import binaryninja
     import binja_frontend
+    import binja_coverage
     good = True
 except ImportError:
     pass
