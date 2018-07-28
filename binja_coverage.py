@@ -5,11 +5,12 @@ import logging
 import random
 
 logging.disable(logging.WARNING)
+COVERAGE_FIRST_LOAD = True
 SHOW_VISITS = True
 SHOW_LENGTH = True
 SHOW_VISITORS = False
 TRACK_COVERAGE = True
-IDLE_ASK = 500
+IDLE_ASK = 250
 COLOUR_PERIOD = 20
 bb_visit_count = {}
 bb_visit_length = {}
@@ -85,20 +86,6 @@ def watch_cur_func(bv):
     def get_cur_bb():
         return get_bb_by_addr(bv, bv.offset)
 
-    opt_visit = ChoiceField("Visualize Visits (Red)", ["Yes", "No"])
-    opt_length = ChoiceField("Visualize Length (Blue)", ["Yes", "No"])
-    opt_visitors = ChoiceField("Visualize Visitors (Green)", ["No", "Yes"])
-    res = get_form_input(["Visualize by colouring backgrounds?", None, opt_visit, opt_length, opt_visitors],
-                         "Visualization Options")
-    if res:
-        log_info('Coverage: Visualization Options Set')
-        if opt_visit.result > 0:
-            SHOW_VISITS = not SHOW_VISITS
-        if opt_length.result > 0:
-            SHOW_LENGTH = not SHOW_LENGTH
-        if opt_visitors.result > 0:
-            SHOW_VISITORS = not SHOW_VISITORS
-
     last_func = None
     last_bb = None
     last_addr = None
@@ -123,7 +110,7 @@ def watch_cur_func(bv):
                     bb_visit_length[last_bb.start] += 1
                 if last_func is not None:
                     func_visit_length[last_func.start] += 1
-                sleep(0.25)
+                sleep(0.50)
             else:
                 cur_bb = get_cur_bb()
                 cur_func = get_cur_func()
@@ -153,7 +140,26 @@ def watch_cur_func(bv):
 
 
 def coverage_load(bv):
+    global COVERAGE_FIRST_LOAD
+    global SHOW_VISITS
+    global SHOW_LENGTH
+    global SHOW_VISITORS
     log_info('Coverage: Tracking Started')
+    if COVERAGE_FIRST_LOAD:
+        opt_visit = ChoiceField("Visualize Visits (Red)", ["Yes", "No"])
+        opt_length = ChoiceField("Visualize Length (Blue)", ["Yes", "No"])
+        opt_visitors = ChoiceField("Visualize Visitors (Green)", ["No", "Yes"])
+        res = get_form_input(["Visualize by colouring backgrounds?", None, opt_visit, opt_length, opt_visitors],
+                             "Visualization Options")
+        if res:
+            log_info('Coverage: Visualization Options Set')
+            if opt_visit.result > 0:
+                SHOW_VISITS = not SHOW_VISITS
+            if opt_length.result > 0:
+                SHOW_LENGTH = not SHOW_LENGTH
+            if opt_visitors.result > 0:
+                SHOW_VISITORS = not SHOW_VISITORS
+        COVERAGE_FIRST_LOAD = False
     t1 = threading.Thread(target=watch_cur_func, args=(bv,))
     t1.daemon = True
     t1.start()
