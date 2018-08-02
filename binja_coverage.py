@@ -4,6 +4,8 @@ from binaryninja.plugin import PluginCommand
 import logging
 import random
 
+
+
 logging.disable(logging.WARNING)
 COVERAGE_FIRST_LOAD = True
 SHOW_VISITS = True
@@ -12,11 +14,7 @@ SHOW_VISITORS = False
 TRACK_COVERAGE = True
 IDLE_ASK = 250
 COLOUR_PERIOD = 20
-bb_visit_count = {}
-bb_visit_length = {}
-bb_visitors = {}
-func_visit_count = {}
-func_visit_length = {}
+bb_coverage = {}
 
 
 def get_func_by_addr(bv, addr):
@@ -33,52 +31,47 @@ def get_bb_by_addr(bv, addr):
     return None
 
 
-def colour_blocks(blocks):
-    for block in blocks:
-        b = blocks[block]
-        b["f"].set_comment_at(b["b"].start, "R: %d B: %d G: %d" % (b["R"], b["B"], b["G"]))
-        if not SHOW_VISITS:
-            b["R"] = 0
-        if not SHOW_LENGTH:
-            b["B"] = 0
-        if not SHOW_VISITORS:
-            b["G"] = 0
-        if b["R"] == 0 and b["B"] == 0 and b["G"] == 0:
-            b["b"].set_user_highlight(highlight.HighlightColor(red=42, blue=42, green=42))
-        else:
-            b["b"].set_user_highlight(highlight.HighlightColor(red=b["R"], blue=b["B"], green=b["G"]))
-
-
-def colour_coverage(bv, visits, length, visitors):
-    blocks = {}
-    max_count = visits[max(visits, key=visits.get)]
-    for addr in visits:
-        if addr not in blocks:
-            blocks[addr] = {"b": get_bb_by_addr(bv, addr), "f": get_func_by_addr(bv, addr), "R": 0, "B": 0, "G": 0}
-        blocks[addr]["R"] = (visits[addr] * 0xff) / max_count
-    max_count = length[max(length, key=length.get)]
-    for addr in length:
-        if addr not in blocks:
-            blocks[addr] = {"b": get_bb_by_addr(addr), "f": get_func_by_addr(bv, addr), "R": 0, "B": 0, "G": 0}
-        blocks[addr]["B"] = (length[addr] * 0xff) / max_count
-    max_count = visitors[max(visitors, key=visitors.get)]
-    for addr in visitors:
-        if addr not in blocks:
-            blocks[addr] = {"b": get_bb_by_addr(addr), "f": get_func_by_addr(bv, addr), "R": 0, "B": 0, "G": 0}
-        blocks[addr]["G"] = (visitors[addr] * 0xff) / max_count
-    colour_blocks(blocks)
-
-
-def watch_cur_func(bv):
+def colour_blocks(blocks, max_visits, max_length, max_visitors):
     global SHOW_VISITS
     global SHOW_LENGTH
     global SHOW_VISITORS
+    for bb in blocks:
+        cov = blocks[bb]
+        R, B, G = 0, 0, 0
+        if SHOW_VISITS and cov["visits"] > 0:
+            R = (cov["visits"] * 0x96) / max_visits
+        if SHOW_LENGTH and cov["length"] > 0:
+            B = (cov["length"] * 0x96) / max_length
+        if SHOW_VISITORS and cov["visitors"] > 0:
+            G = (cov["visitors"] * 0x96) / max_visitors
+        if R == 0 and B == 0 and G == 0:
+            bb.set_user_highlight(highlight.HighlightColor(red=74, blue=74, green=74))
+        else:
+            bb.set_user_highlight(highlight.HighlightColor(red=R, blue=B, green=G))
+
+
+def colour_coverage(cur_func, coverage):
+    if cur_func is None:
+        return
+    blocks = {}
+    max_visits = 0
+    max_length = 0
+    max_visitors = 0
+    for bb in coverage:
+        if coverage[bb]["visits"] > max_visits:
+            max_visits = coverage[bb]["visits"]
+        if coverage[bb]["length"] > max_length:
+            max_length = coverage[bb]["length"]
+        if coverage[bb]["visitors"] > max_visitors:
+            max_visitors = coverage[bb]["visitors"]
+        if bb.function == cur_func:
+            blocks[bb] = coverage[bb]
+    colour_blocks(blocks, max_visits, max_length, max_visitors)
+
+
+def watch_cur_func(bv):
     global TRACK_COVERAGE
-    global bb_visit_count
-    global bb_visit_length
-    global bb_visitors
-    global func_visit_count
-    global func_visit_length
+    global bb_coverage
 
     def get_cur_func():
         return get_func_by_addr(bv, bv.offset)
@@ -89,6 +82,7 @@ def watch_cur_func(bv):
     last_func = None
     last_bb = None
     last_addr = None
+    cur_func = None
     idle = 0
     colour = 0
     while True:
@@ -100,16 +94,10 @@ def watch_cur_func(bv):
             else:
                 idle = 0
         if TRACK_COVERAGE:
-            colour += 1
-            if colour > COLOUR_PERIOD:
-                colour_coverage(bv, bb_visit_count, bb_visit_length, bb_visitors)
-                colour = 0
             if last_addr == bv.offset:
                 idle += 1
                 if last_bb is not None:
-                    bb_visit_length[last_bb.start] += 1
-                if last_func is not None:
-                    func_visit_length[last_func.start] += 1
+                    bb_coverage[last_bb]["length"] += 1
                 sleep(0.50)
             else:
                 cur_bb = get_cur_bb()
@@ -118,22 +106,17 @@ def watch_cur_func(bv):
                 idle = 0
                 if cur_bb != last_bb:
                     if cur_bb is not None:
-                        if cur_bb.start not in bb_visit_count:
-                            bb_visit_count[cur_bb.start] = 0
-                        if cur_bb.start not in bb_visit_length:
-                            bb_visit_length[cur_bb.start] = 0
-                        if cur_bb.start not in bb_visitors:
-                            bb_visitors[cur_bb.start] = random.randint(1, 50)
-                        bb_visit_count[cur_bb.start] += 1
+                        if cur_bb not in bb_coverage:
+                            bb_coverage[cur_bb] = {"visits": 0, "length": 0, "visitors": random.randint(1, 50)}
+                        bb_coverage[cur_bb]["visits"] += 1
                     last_bb = cur_bb
                 if cur_func != last_func:
-                    if cur_func is not None:
-                        if cur_func.start not in func_visit_count:
-                            func_visit_count[cur_func.start] = 0
-                        if cur_func.start not in func_visit_length:
-                            func_visit_length[cur_func.start] = 0
-                        func_visit_count[cur_func.start] += 1
+                    colour = COLOUR_PERIOD
                     last_func = cur_func
+            colour += 1
+            if colour > COLOUR_PERIOD:
+                colour_coverage(cur_func, bb_coverage)
+                colour = 0
         else:
             idle = 0
             sleep(2)
