@@ -4,8 +4,6 @@ from binaryninja.plugin import PluginCommand
 import logging
 import random
 
-
-
 logging.disable(logging.WARNING)
 COVERAGE_FIRST_LOAD = True
 SHOW_VISITS = True
@@ -86,14 +84,14 @@ def watch_cur_func(bv):
     idle = 0
     colour = 0
     while True:
-        if idle > IDLE_ASK:
-            res = get_choice_input("Continue coverage tracking?", "Idle Detection", ["Disable", "Continue"])
-            if res == 0:
-                log_info('Coverage: Tracking Stopped')
-                exit()
-            else:
-                idle = 0
         if TRACK_COVERAGE:
+            if idle > IDLE_ASK:
+                res = get_choice_input("Continue coverage tracking?", "Idle Detection", ["Disable", "Continue"])
+                if res == 0:
+                    log_info('Coverage: Tracking Stopped')
+                    exit()
+                else:
+                    idle = 0
             if last_addr == bv.offset:
                 idle += 1
                 if last_bb is not None:
