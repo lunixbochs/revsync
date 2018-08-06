@@ -125,7 +125,7 @@ def onmsg(bv, key, data, replay):
     elif cmd == 'join':
         log_info('revsync: <%s> joined' % (user))
     elif cmd == 'coverage':
-        log_info("Updating Coverage")
+        log_info("Updating Global Coverage")
         update_bb_coverage(bv, json.loads(data['blocks']))
     else:
         log_info('revsync: unknown cmd %s' % data)
@@ -242,6 +242,8 @@ def watch_cur_func(bv):
             bb_start = get_can_addr(bv, last_bb.start)
             if bb_start in bb_local_coverage:
                 bb_local_coverage[bb_start]["l"] += 1
+            if last_bb in bb_coverage:
+                bb_coverage[last_bb]["l"] += 1
             sleep(0.25)
         else:
             # were we just in a function?
@@ -298,7 +300,10 @@ def watch_cur_func(bv):
                             if cur_bb_addr is not None:
                                 if cur_bb_addr not in bb_coverage:
                                     bb_local_coverage[cur_bb_addr] = {"v": 0, "l": 0}
-                                    bb_local_coverage[cur_bb_addr]["v"] += 1
+                                bb_local_coverage[cur_bb_addr]["v"] += 1
+                            if cur_bb not in bb_coverage:
+                                bb_coverage[cur_bb] = {"v": 0, "l": 0, "u": 1}
+                            bb_coverage[cur_bb]["v"] += 1
 
             # update current function/addr info
             last_func = get_cur_func()
