@@ -1,7 +1,6 @@
 import redis
 from time import sleep
 from datetime import datetime, timedelta
-from client import Client
 from config import config
 import json
 
@@ -45,7 +44,7 @@ while True:
 
             print "Rolling Up: %s" % k
             cov = rollup(r, key, cov)
-            print cov
+            print len(cov.keys())
 
             print "Storing Results"
             r.set(name="%s_STORE" % k, value=json.dumps(cov))

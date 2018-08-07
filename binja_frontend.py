@@ -9,6 +9,8 @@ from config import config
 from comments import NoChange
 from comments import comments as cmt_data
 
+from math import log
+
 SHOW_VISITS = True
 SHOW_LENGTH = True
 SHOW_VISITORS = False
@@ -88,10 +90,12 @@ def push_cv(bv, data, **kwargs):
 
 def update_bb_coverage(bv, cov):
     global bb_coverage
+    global COLOUR_NOW
     for addr in cov.keys():
         bb = get_bb_by_addr(bv, get_ea(bv, int(addr)))
         if bb is not None:
             bb_coverage[bb] = cov[addr]
+    COLOUR_NOW = True
 
 def onmsg(bv, key, data, replay):
     if key != bv.session_data['fhash']:
@@ -207,6 +211,7 @@ def watch_syms(bv, sym_type):
 
 def watch_cur_func(bv):
     global TRACK_COVERAGE
+    global COLOUR_NOW
     """ Watch current function (if we're in code) for comment changes and publish diffs """
     def get_cur_func():
         return get_func_by_addr(bv, bv.offset)
@@ -220,9 +225,10 @@ def watch_cur_func(bv):
     last_stackvars = {}
     bb_local_coverage = {}
     bb_interval = 0
-    BB_REPORT = 10
-    colour = 0
-    COLOUR_PERIOD = 20
+    BB_REPORT = 50
+    COLOUR_NOW = False
+    temp_length = 0
+    last_bb_addr = None
     if last_func:
         last_comments = last_func.comments
         last_stackvars = stack_dict_from_list(last_func.vars)
@@ -237,13 +243,15 @@ def watch_cur_func(bv):
                     new_bb_coverage[bb_addr] = {"v": 0, "l": 0}
                 push_cv(bv, {"b": bb_local_coverage})
                 bb_local_coverage = new_bb_coverage
-                bb_interval = 0
+            bb_interval = 0
+            COLOUR_NOW = True
         if last_addr == bv.offset:
             bb_start = get_can_addr(bv, last_bb.start)
             if bb_start in bb_local_coverage:
                 bb_local_coverage[bb_start]["l"] += 1
             if last_bb in bb_coverage:
                 bb_coverage[last_bb]["l"] += 1
+            temp_length += 1
             sleep(0.25)
         else:
             # were we just in a function?
@@ -295,8 +303,14 @@ def watch_cur_func(bv):
                 if TRACK_COVERAGE:
                     cur_bb = get_cur_bb()
                     if cur_bb != last_bb:
+                        COLOUR_NOW = True
+                        if last_bb_addr is not None:
+                            bb_local_coverage[last_bb_addr]["l"] += int(log(temp_length, 2))
+                            bb_coverage[last_bb]["l"] += int(log(temp_length, 2))
+                        temp_length = 0
                         if cur_bb is not None:
                             cur_bb_addr = get_can_addr(bv, cur_bb.start)
+                            last_bb_addr = cur_bb_addr
                             if cur_bb_addr is not None:
                                 if cur_bb_addr not in bb_coverage:
                                     bb_local_coverage[cur_bb_addr] = {"v": 0, "l": 0}
@@ -315,10 +329,10 @@ def watch_cur_func(bv):
                 last_comments = {}
                 last_stackvars = {} 
             last_addr = bv.offset
-        colour += 1
-        if colour > COLOUR_PERIOD:
-            colour_coverage(last_func)
-            colour = 0
+
+            if COLOUR_NOW:
+                colour_coverage(last_func)
+                COLOUR_NOW = False
 
 def revsync_load(bv):
     global client
@@ -347,27 +361,33 @@ def revsync_load(bv):
 
 def toggle_visits(bv):
     global SHOW_VISITS
+    global COLOUR_NOW
     SHOW_VISITS = not SHOW_VISITS
     if SHOW_VISITS:
         log_info("Visit Visualization Enabled (Red)")
     else:
         log_info("Visit Visualization Disabled (Red)")
+    COLOUR_NOW = True
 
 def toggle_length(bv):
     global SHOW_LENGTH
+    global COLOUR_NOW
     SHOW_LENGTH = not SHOW_LENGTH
     if SHOW_LENGTH:
         log_info("Length Visualization Enabled (Blue)")
     else:
         log_info("Length Visualization Disabled (Blue)")
+    COLOUR_NOW = True
 
 def toggle_visitors(bv):
     global SHOW_VISITORS
+    global COLOUR_NOW
     SHOW_VISITORS = not SHOW_VISITORS
     if SHOW_VISITORS:
         log_info("Visitor Visualization Enabled (Green)")
     else:
         log_info("Visitor Visualization Disabled (Green)")
+    COLOUR_NOW = True
 
 def toggle_track(bv):
     global TRACK_COVERAGE
