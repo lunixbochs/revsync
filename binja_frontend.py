@@ -1,6 +1,7 @@
 import hashlib
 from time import sleep
 
+from time import time
 from binaryninja import *
 from binaryninja.plugin import PluginCommand
 
@@ -223,11 +224,12 @@ def watch_cur_func(bv):
     last_bb = get_cur_bb()
     last_comments = {}
     last_stackvars = {}
+    last_time = time()
     bb_local_coverage = {}
     bb_interval = 0
     BB_REPORT = 50
     COLOUR_NOW = False
-    temp_length = 0
+    #temp_length = 0
     last_bb_addr = None
     if last_func:
         last_comments = last_func.comments
@@ -246,12 +248,6 @@ def watch_cur_func(bv):
             bb_interval = 0
             COLOUR_NOW = True
         if last_addr == bv.offset:
-            bb_start = get_can_addr(bv, last_bb.start)
-            if bb_start in bb_local_coverage:
-                bb_local_coverage[bb_start]["l"] += 1
-            if last_bb in bb_coverage:
-                bb_coverage[last_bb]["l"] += 1
-            temp_length += 1
             sleep(0.25)
         else:
             # were we just in a function?
@@ -304,10 +300,11 @@ def watch_cur_func(bv):
                     cur_bb = get_cur_bb()
                     if cur_bb != last_bb:
                         COLOUR_NOW = True
+                        cur_time = time()
                         if last_bb_addr is not None:
-                            bb_local_coverage[last_bb_addr]["l"] += int(log(temp_length, 2))
-                            bb_coverage[last_bb]["l"] += int(log(temp_length, 2))
-                        temp_length = 0
+                            bb_local_coverage[last_bb_addr]["l"] += int(log(cur_time - last_time, 2))
+                            bb_coverage[last_bb]["l"] += int(log(cur_time - last_time, 2))
+                        last_time = time()
                         if cur_bb is not None:
                             cur_bb_addr = get_can_addr(bv, cur_bb.start)
                             last_bb_addr = cur_bb_addr
@@ -318,6 +315,8 @@ def watch_cur_func(bv):
                             if cur_bb not in bb_coverage:
                                 bb_coverage[cur_bb] = {"v": 0, "l": 0, "u": 1}
                             bb_coverage[cur_bb]["v"] += 1
+                        else:
+                            last_bb_addr = None
 
             # update current function/addr info
             last_func = get_cur_func()
