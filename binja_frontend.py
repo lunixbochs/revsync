@@ -9,6 +9,7 @@ from client import Client
 from config import config
 from comments import NoChange
 from comments import comments as cmt_data
+from coverage import Coverage
 
 from math import log
 
@@ -18,7 +19,10 @@ SHOW_VISITORS = False
 TRACK_COVERAGE = True
 IDLE_ASK = 250
 COLOUR_PERIOD = 20
-bb_coverage = {}
+COLOUR_NOW = False
+MAX_COLOR = 150
+BB_REPORT = 50
+coverage = defaultdict(Coverage)
 
 def get_fhash(fname):
     with open(fname, 'rb') as f:
@@ -83,22 +87,14 @@ def rename_stackvar(bv, func_addr, offset, name):
 
 def publish(bv, data, **kwargs):
     if bv.session_data['fhash'] == get_fhash(bv.file.filename):
-        bv.session_data['client'].publish(bv.session_data['fhash'], data, **kwargs)
+        client.publish(bv.session_data['fhash'], data, **kwargs)
 
 def push_cv(bv, data, **kwargs):
     if bv.session_data['fhash'] == get_fhash(bv.file.filename):
-        bv.session_data['client'].push("%s_COVERAGE" % bv.session_data['fhash'], data, **kwargs)
-
-def update_bb_coverage(bv, cov):
-    global bb_coverage
-    global COLOUR_NOW
-    for addr in cov.keys():
-        bb = get_bb_by_addr(bv, get_ea(bv, int(addr)))
-        if bb is not None:
-            bb_coverage[bb] = cov[addr]
-    COLOUR_NOW = True
+        client.push("%s_COVERAGE" % bv.session_data['fhash'], data, **kwargs)
 
 def onmsg(bv, key, data, replay):
+    global COLOUR_NOW
     if key != bv.session_data['fhash']:
         log_info('revsync: hash mismatch, dropping command')
         return
@@ -131,7 +127,9 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> joined' % (user))
     elif cmd == 'coverage':
         log_info("Updating Global Coverage")
-        update_bb_coverage(bv, json.loads(data['blocks']))
+        # FIXME: don't double-json-encode data['blocks']
+        coverage[bv].update(json.loads(data['blocks']))
+        COLOUR_NOW = True
     else:
         log_info('revsync: unknown cmd %s' % data)
 
@@ -150,42 +148,14 @@ def revsync_rename(bv, addr):
     publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
     rename_symbol(bv, addr, name)
 
-def colour_blocks(blocks, max_visits, max_length, max_visitors):
-    global SHOW_VISITS
-    global SHOW_LENGTH
-    global SHOW_VISITORS
-    for bb in blocks:
-        cov = blocks[bb]
-        R, B, G = 0, 0, 0
-        if SHOW_VISITS and cov["v"] > 0:
-            R = (cov["v"] * 0x96) / max_visits
-        if SHOW_LENGTH and cov["l"] > 0:
-            B = (cov["l"] * 0x96) / max_length
-        if SHOW_VISITORS and cov["u"] > 0:
-            G = (cov["u"] * 0x96) / max_visitors
-        if R == 0 and B == 0 and G == 0:
-            bb.set_user_highlight(highlight.HighlightColor(red=74, blue=74, green=74))
-        else:
-            bb.set_user_highlight(highlight.HighlightColor(red=R, blue=B, green=G))
-
-def colour_coverage(cur_func):
-    global bb_coverage
-    if cur_func is None:
-        return
-    blocks = {}
-    max_visits = 0
-    max_length = 0
-    max_visitors = 0
-    for bb in bb_coverage:
-        if bb_coverage[bb]["v"] > max_visits:
-            max_visits = bb_coverage[bb]["v"]
-        if bb_coverage[bb]["l"] > max_length:
-            max_length = bb_coverage[bb]["l"]
-        if bb_coverage[bb]["u"] > max_visitors:
-            max_visitors = bb_coverage[bb]["u"]
-        if bb.function == cur_func:
-            blocks[bb] = bb_coverage[bb]
-    colour_blocks(blocks, max_visits, max_length, max_visitors)
+def colour_coverage(bv, cur_func):
+    cov = bb_coverage[bv]
+    for bb in cur_func.basic_blocks:
+        color = cov.color(get_can_addr(bb.addr))
+        if color:
+            r, g, b = color
+            color = highlight.HighlightColor(red=r, green=g, blue=b)
+            bb.set_user_highlight(color)
 
 def watch_syms(bv, sym_type):
     """ Watch symbols of a given type (e.g. DataSymbol) for changes and publish diffs """
@@ -211,7 +181,6 @@ def watch_syms(bv, sym_type):
         sleep(0.5)
 
 def watch_cur_func(bv):
-    global TRACK_COVERAGE
     global COLOUR_NOW
     """ Watch current function (if we're in code) for comment changes and publish diffs """
     def get_cur_func():
@@ -225,30 +194,22 @@ def watch_cur_func(bv):
     last_comments = {}
     last_stackvars = {}
     last_time = time()
-    bb_local_coverage = {}
-    bb_interval = 0
-    BB_REPORT = 50
-    COLOUR_NOW = False
     #temp_length = 0
+    last_bb_report = time.time()
     last_bb_addr = None
     if last_func:
         last_comments = last_func.comments
         last_stackvars = stack_dict_from_list(last_func.vars)
     last_addr = None
     while True:
-        bb_interval += 1
-        if bb_interval > BB_REPORT:
-            if len(bb_local_coverage.keys()) > 0:
-                new_bb_coverage = {}
-                if last_bb:
-                    bb_addr = get_can_addr(bv, last_bb.start)
-                    new_bb_coverage[bb_addr] = {"v": 0, "l": 0}
-                push_cv(bv, {"b": bb_local_coverage})
-                bb_local_coverage = new_bb_coverage
-            bb_interval = 0
-            COLOUR_NOW = True
+        now = time.time()
+        if TRACK_COVERAGE and now - last_bb_report >= BB_REPORT:
+            last_bb_report = now
+            push_cv(bv, {'b': cov.flush()})
+
         if last_addr == bv.offset:
             sleep(0.25)
+            continue
         else:
             # were we just in a function?
             if last_func:
@@ -279,8 +240,9 @@ def watch_cur_func(bv):
                     if last_comments:
                         removed = set(last_comments.keys()) - set(comments.keys())
                         for addr in removed:
+                            addr = get_can_addr(bv, addr)
                             log_info('revsync: user removed comment: %#x' % addr)
-                            publish(bv, {'cmd': 'comment', 'addr': get_can_addr(bv, addr), 'text': ''})
+                            publish(bv, {'cmd': 'comment', 'addr': addr, 'text': ''})
 
                 # similar dance, but with stackvars 
                 stackvars = stack_dict_from_list(last_func.vars)
@@ -297,26 +259,18 @@ def watch_cur_func(bv):
                                 publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': cur_name})
 
                 if TRACK_COVERAGE:
+                    cov = coverage[self.bv]
                     cur_bb = get_cur_bb()
                     if cur_bb != last_bb:
                         COLOUR_NOW = True
-                        cur_time = time()
+                        now = time()
                         if last_bb_addr is not None:
-                            bb_local_coverage[last_bb_addr]["l"] += int(log(cur_time - last_time, 2))
-                            bb_coverage[last_bb]["l"] += int(log(cur_time - last_time, 2))
-                        last_time = time()
-                        if cur_bb is not None:
-                            cur_bb_addr = get_can_addr(bv, cur_bb.start)
-                            last_bb_addr = cur_bb_addr
-                            if cur_bb_addr is not None:
-                                if cur_bb_addr not in bb_coverage:
-                                    bb_local_coverage[cur_bb_addr] = {"v": 0, "l": 0}
-                                bb_local_coverage[cur_bb_addr]["v"] += 1
-                            if cur_bb not in bb_coverage:
-                                bb_coverage[cur_bb] = {"v": 0, "l": 0, "u": 1}
-                            bb_coverage[cur_bb]["v"] += 1
-                        else:
+                            cov.visit(last_bb_addr, elapsed=now - last_time, visits=1)
+                        last_time = now
+                        if cur_bb is None:
                             last_bb_addr = None
+                        else:
+                            last_bb_addr = get_can_addr(bv, cur_bb.start)
 
             # update current function/addr info
             last_func = get_cur_func()
@@ -330,7 +284,8 @@ def watch_cur_func(bv):
             last_addr = bv.offset
 
             if COLOUR_NOW:
-                colour_coverage(last_func)
+                cov = coverage[self.bv]
+                colour_coverage(bv, last_func)
                 COLOUR_NOW = False
 
 def revsync_load(bv):
@@ -343,7 +298,6 @@ def revsync_load(bv):
         # close out the previous session
         bv.session_data['client'].leave(bv.session_data['fhash'])
     fhash = get_fhash(bv.file.filename)
-    bv.session_data['client'] = client
     bv.session_data['fhash'] = fhash
     log_info('revsync: connecting with %s' % fhash)
     client.join(fhash, revsync_callback(bv))
