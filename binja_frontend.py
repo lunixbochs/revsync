@@ -19,7 +19,7 @@ class State:
 
     show_visits = True
     show_time = True
-    show_visitors = True
+    show_visitors = False
     track_coverage = True
     color_now = False
     running = False
