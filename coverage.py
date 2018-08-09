@@ -25,13 +25,15 @@ class Block:
         self.users += b['u']
 
     def color(self, max_visits, max_time, max_users):
-        r = g = b = 0.5
+        r = g = b = 0
         if max_visits and self.visits > 0:
-            r = (self.visits * 0x96) / max_visits
+            r = self.visits / max_visits
         if max_time and self.time > 0:
-            g = (self.log_time * 0x96) / max_time
+            g = self.log_time / max_time
         if max_users and self.users > 0:
-            b = (self.users * 0x96) / max_users
+            b = self.users / max_users
+        if r == g == b == 0:
+            r = g = b = 0.5
         return r, g, b
 
 class Blocks(defaultdict):
