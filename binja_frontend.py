@@ -1,4 +1,5 @@
 import hashlib
+import math
 import time
 from collections import defaultdict
 
@@ -17,7 +18,7 @@ class State:
         return bv.session_data.get('revsync')
 
     show_visits = True
-    show_length = True
+    show_time = True
     show_visitors = True
     track_coverage = True
     color_now = False
@@ -36,9 +37,11 @@ class State:
     def close(self):
         self.running = False
 
+MIN_COLOR = 0
+MAX_COLOR = 200
+
 IDLE_ASK = 250
 COLOUR_PERIOD = 20
-MAX_COLOR = 148
 BB_REPORT = 50
 
 def get_fhash(fname):
@@ -174,14 +177,25 @@ def revsync_rename(bv, addr):
     publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
     rename_symbol(bv, addr, name)
 
+def map_color(x):
+    n = x
+    if x == 0: return 0
+    # x = min(max(0, (x ** 2) / (2 * (x ** 2 - x) + 1)), 1)
+    # if x == 0: return 0
+    return int(math.ceil((MAX_COLOR - MIN_COLOR) * x + MIN_COLOR))
+
+def convert_color(color):
+    r, g, b = [map_color(x) for x in color]
+    return highlight.HighlightColor(red=r, green=g, blue=b)
+
 def colour_coverage(bv, cur_func):
     state = State.get(bv)
     for bb in cur_func.basic_blocks:
-        color = state.cov.color(get_can_addr(bv, bb.start), visits=state.show_visits, time=state.show_length, users=state.show_visitors)
+        color = state.cov.color(get_can_addr(bv, bb.start), visits=state.show_visits, time=state.show_time, users=state.show_visitors)
         if color:
-            r, g, b = color
-            color = highlight.HighlightColor(red=int(r * MAX_COLOR), green=int(g * MAX_COLOR), blue=int(b * MAX_COLOR))
-            bb.set_user_highlight(color)
+            bb.set_user_highlight(convert_color(color))
+        else:
+            bb.set_user_highlight(highlight.HighlightColor(red=74, blue=74, green=74))
 
 def watch_syms(bv, sym_type):
     """ Watch symbols of a given type (e.g. DataSymbol) for changes and publish diffs """
@@ -220,7 +234,6 @@ def watch_cur_func(bv):
     last_func = get_cur_func()
     last_bb = get_cur_bb()
     last_time = time.time()
-    #temp_length = 0
     last_bb_report = time.time()
     last_bb_addr = None
     last_addr = None
@@ -341,13 +354,13 @@ def toggle_visits(bv):
         log_info("Visit Visualization Disabled (Red)")
     state.color_now = True
 
-def toggle_length(bv):
+def toggle_time(bv):
     state = State.get(bv)
-    state.show_length = not state.show_length
-    if state.show_length:
-        log_info("Length Visualization Enabled (Blue)")
+    state.show_time = not state.show_time
+    if state.show_time:
+        log_info("Time Visualization Enabled (Blue)")
     else:
-        log_info("Length Visualization Disabled (Blue)")
+        log_info("Time Visualization Disabled (Blue)")
     state.color_now = True
 
 def toggle_visitors(bv):
@@ -369,6 +382,6 @@ def toggle_track(bv):
 
 PluginCommand.register('Coverage: Toggle Tracking', 'Toggle Tracking', toggle_track)
 PluginCommand.register('Coverage: Toggle Visits (RED)', 'Toggle Red', toggle_visits)
-PluginCommand.register('Coverage: Toggle Length (BLUE)', 'Toggle Blue', toggle_length)
+PluginCommand.register('Coverage: Toggle Time (BLUE)', 'Toggle Blue', toggle_time)
 PluginCommand.register('Coverage: Toggle Visitors (GREEN)', 'Toggle Green', toggle_visitors)
 PluginCommand.register('revsync: load', 'load revsync!!!', revsync_load)
