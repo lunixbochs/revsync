@@ -15,9 +15,10 @@ First, clone to IDA Data Dir:
 
 Now:
 
-- Make a file in your data dir called `idapythonrc.py` and append `import revsync`.
+- Make a file in your dir above named _idapythonrc.py_ and append `import revsync`.
 - Copy _config.json.template_ to _config.json_ and fill out.
 - Restart IDA and look for revsync messages in the console.
+  - In the Python console, typing `import revsync` should work without issue.
 
 Expected data directory layout is this (Mac/Linux):
 
