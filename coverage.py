@@ -73,8 +73,9 @@ class Block:
             return None
 
         # this semi-softmax hedges against the colors ending up too close together and making grey
-        total = float(r + g + b)
         m = max((r, g, b))
+        r, g, b = r ** 2, g ** 2, b ** 2
+        total = float(r + g + b)
         r, g, b = r / total * m, g / total * m, b / total * m
         return r, g, b
 
