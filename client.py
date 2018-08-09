@@ -12,7 +12,7 @@ cmd_hash_keys = {
     'extra_comment': ('addr',),
     'area_comment': ('addr',),
     'rename': ('addr',),
-    'stackvar_renamed': ('addr', 'offset', 'name',)
+    'stackvar_renamed': ('addr', 'offset', 'name',),
     'struc_created': ('struc_name', 'is_union',),
     'struc_deleted': ('struc_name',),
     'struc_renamed': ('old_name', 'new_name',),
