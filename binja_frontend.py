@@ -32,6 +32,9 @@ class State:
         self.cmt_lock = Lock()
         self.stackvar_changes = dict()
         self.stackvar_lock = Lock()
+        self.data_syms = get_syms(bv, SymbolType.DataSymbol)
+        self.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
+        self.syms_lock = Lock()
 
     def close(self):
         self.running = False
@@ -62,6 +65,15 @@ def get_bb_by_addr(bv, addr):
     if len(bb) > 0:
         return bb[0]
     return None
+
+def get_syms(bv, sym_type):
+    # comes as list of Symbols
+    syms = bv.get_symbols_of_type(sym_type)
+    # turn our list into dict of addr => sym name
+    syms_dict = dict()
+    for sym in syms:
+        syms_dict[sym.address] = sym.name
+    return syms_dict
 
 def stack_dict_from_list(stackvars):
     d = {}
@@ -135,9 +147,13 @@ def onmsg(bv, key, data, replay):
     elif cmd == 'area_comment':
         log_info('revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text']))
     elif cmd == 'rename':
+        state.syms_lock.acquire()
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
         addr = get_ea(bv, int(data['addr']))
         rename_symbol(bv, addr, data['text'])
+        state.data_syms = get_syms(bv, SymbolType.DataSymbol)
+        state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
+        state.syms_lock.release()
     elif cmd == 'stackvar_renamed':
         state.stackvar_lock.acquire()
         func_name = '???'
@@ -187,25 +203,29 @@ def watch_syms(bv, sym_type):
     """ Watch symbols of a given type (e.g. DataSymbol) for changes and publish diffs """
     state = State.get(bv)
 
-    def get_syms():
-        # comes as list of Symbols
-        syms = bv.get_symbols_of_type(sym_type)
-        # turn our list into dict of addr => sym name
-        syms_dict = dict()
-        for sym in syms:
-            syms_dict[sym.address] = sym.name
-        return syms_dict
-
-    last_syms = get_syms()
     while state.running:
-        syms = get_syms()
-        if syms != last_syms:
-            for addr, name in syms.items():
-                if last_syms.get(addr) != name:
+        state.syms_lock.acquire()
+        # DataSymbol
+        data_syms = get_syms(bv, SymbolType.DataSymbol)
+        if data_syms != state.data_syms:
+            for addr, name in data_syms.items():
+                if state.data_syms.get(addr) != name:
                     # name changed, publish
                     log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
                     publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
-        last_syms = syms
+
+        # FunctionSymbol
+        func_syms = get_syms(bv, SymbolType.FunctionSymbol)
+        if func_syms != state.func_syms:
+            for addr, name in func_syms.items():
+                if state.func_syms.get(addr) != name:
+                    # name changed, publish
+                    log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
+                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
+
+        state.data_syms = get_syms(bv, SymbolType.DataSymbol)
+        state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
+        state.syms_lock.release()
         time.sleep(0.5)
 
 def watch_cur_func(bv):
