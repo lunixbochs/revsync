@@ -7,20 +7,34 @@ from binaryninja.plugin import PluginCommand
 
 from client import Client
 from config import config
-from comments import NoChange
-from comments import comments as cmt_data
+from comments import Comments, NoChange
 from coverage import Coverage
 
-SHOW_VISITS = True
-SHOW_LENGTH = True
-SHOW_VISITORS = False
-TRACK_COVERAGE = True
+class State:
+    @staticmethod
+    def get(bv):
+        return bv.session_data.get('revsync')
+
+    show_visits = True
+    show_length = True
+    show_visitors = True
+    track_coverage = True
+    color_now = False
+    running = False
+
+    def __init__(self, bv):
+        self.cov = Coverage()
+        self.comments = Comments()
+        self.fhash = get_fhash(bv.file.filename)
+        self.running = True
+
+    def close(self):
+        self.running = False
+
 IDLE_ASK = 250
 COLOUR_PERIOD = 20
-COLOUR_NOW = False
 MAX_COLOR = 148
 BB_REPORT = 50
-coverage = defaultdict(Coverage)
 
 def get_fhash(fname):
     with open(fname, 'rb') as f:
@@ -84,16 +98,18 @@ def rename_stackvar(bv, func_addr, offset, name):
     return
 
 def publish(bv, data, **kwargs):
-    if bv.session_data['fhash'] == get_fhash(bv.file.filename):
-        client.publish(bv.session_data['fhash'], data, **kwargs)
+    state = State.get(bv)
+    if state:
+        client.publish(state.fhash, data, **kwargs)
 
 def push_cv(bv, data, **kwargs):
-    if bv.session_data['fhash'] == get_fhash(bv.file.filename):
-        client.push("%s_COVERAGE" % bv.session_data['fhash'], data, **kwargs)
+    state = State.get(bv)
+    if state:
+        client.push("%s_COVERAGE" % state.fhash, data, **kwargs)
 
 def onmsg(bv, key, data, replay):
-    global COLOUR_NOW
-    if key != bv.session_data['fhash']:
+    state = State.get(bv)
+    if key != state.fhash:
         log_info('revsync: hash mismatch, dropping command')
         return
     cmd, user = data['cmd'], data['user']
@@ -104,7 +120,7 @@ def onmsg(bv, key, data, replay):
         func = get_func_by_addr(bv, addr)
         # binja does not support comments on data symbols??? IDA does.
         if func is not None:
-            text = cmt_data.set(addr, user, data['text'], ts)
+            text = state.comments.set(addr, user, data['text'], ts)
             func.set_comment(addr, text)
     elif cmd == 'extra_comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
@@ -126,8 +142,8 @@ def onmsg(bv, key, data, replay):
     elif cmd == 'coverage':
         log_info("Updating Global Coverage")
         # FIXME: don't double-json-encode data['blocks']
-        coverage[bv].update(json.loads(data['blocks']))
-        COLOUR_NOW = True
+        state.cov.update(json.loads(data['blocks']))
+        state.color_now = True
     else:
         log_info('revsync: unknown cmd %s' % data)
 
@@ -147,9 +163,9 @@ def revsync_rename(bv, addr):
     rename_symbol(bv, addr, name)
 
 def colour_coverage(bv, cur_func):
-    cov = coverage[bv]
+    state = State.get(bv)
     for bb in cur_func.basic_blocks:
-        color = cov.color(get_can_addr(bb.start), visits=SHOW_VISITS, time=SHOW_LENGTH, users=SHOW_VISITORS)
+        color = state.cov.color(get_can_addr(bb.start), visits=state.show_visits, time=state.show_length, users=state.show_visitors)
         if color:
             r, g, b = color
             color = highlight.HighlightColor(red=int(r * MAX_COLOR), green=int(g * MAX_COLOR), blue=int(b * MAX_COLOR))
@@ -157,6 +173,8 @@ def colour_coverage(bv, cur_func):
 
 def watch_syms(bv, sym_type):
     """ Watch symbols of a given type (e.g. DataSymbol) for changes and publish diffs """
+    state = State.get(bv)
+
     def get_syms():
         # comes as list of Symbols
         syms = bv.get_symbols_of_type(sym_type)
@@ -167,7 +185,7 @@ def watch_syms(bv, sym_type):
         return syms_dict
 
     last_syms = get_syms()
-    while True:
+    while state.running:
         syms = get_syms()
         if syms != last_syms:
             for addr, name in syms.items():
@@ -179,7 +197,6 @@ def watch_syms(bv, sym_type):
         time.sleep(0.5)
 
 def watch_cur_func(bv):
-    global COLOUR_NOW
     """ Watch current function (if we're in code) for comment changes and publish diffs """
     def get_cur_func():
         return get_func_by_addr(bv, bv.offset)
@@ -187,6 +204,7 @@ def watch_cur_func(bv):
     def get_cur_bb():
         return get_bb_by_addr(bv, bv.offset)
 
+    state = State.get(bv)
     last_func = get_cur_func()
     last_bb = get_cur_bb()
     last_comments = {}
@@ -199,11 +217,11 @@ def watch_cur_func(bv):
         last_comments = last_func.comments
         last_stackvars = stack_dict_from_list(last_func.vars)
     last_addr = None
-    while True:
+    while state.running:
         now = time.time()
-        if TRACK_COVERAGE and now - last_bb_report >= BB_REPORT:
+        if state.track_coverage and now - last_bb_report >= BB_REPORT:
             last_bb_report = now
-            push_cv(bv, {'b': cov.flush()})
+            push_cv(bv, {'b': state.cov.flush()})
 
         if last_addr == bv.offset:
             time.sleep(0.25)
@@ -219,7 +237,7 @@ def watch_cur_func(bv):
                             # no previous comment at that addr, publish
                             try:
                                 addr = get_can_addr(bv, addr)
-                                changed = cmt_data.parse_comment_update(addr, client.nick, text)
+                                changed = state.comments.parse_comment_update(addr, client.nick, text)
                                 log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
                                 publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
                             except NoChange:
@@ -229,7 +247,7 @@ def watch_cur_func(bv):
                             # changed comment, publish
                             try:
                                 addr = get_can_addr(bv, addr)
-                                changed = cmt_data.parse_comment_update(addr, client.nick, text)
+                                changed = state.comments.parse_comment_update(addr, client.nick, text)
                                 log_info('resync: user changed comment: %#x, %s' % (addr, changed))
                                 publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
                             except NoChange:
@@ -256,14 +274,13 @@ def watch_cur_func(bv):
                                 log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, cur_name))
                                 publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': cur_name})
 
-                if TRACK_COVERAGE:
-                    cov = coverage[bv]
+                if state.track_coverage:
                     cur_bb = get_cur_bb()
                     if cur_bb != last_bb:
-                        COLOUR_NOW = True
+                        state.color_now = True
                         now = time.time()
                         if last_bb_addr is not None:
-                            cov.visit_addr(last_bb_addr, elapsed=now - last_time, visits=1)
+                            state.cov.visit_addr(last_bb_addr, elapsed=now - last_time, visits=1)
                         last_time = now
                         if cur_bb is None:
                             last_bb_addr = None
@@ -281,10 +298,9 @@ def watch_cur_func(bv):
                 last_stackvars = {} 
             last_addr = bv.offset
 
-            if COLOUR_NOW:
-                cov = coverage[bv]
+            if state.color_now:
                 colour_coverage(bv, last_func)
-                COLOUR_NOW = False
+                state.color_now = False
 
 def revsync_load(bv):
     global client
@@ -292,13 +308,15 @@ def revsync_load(bv):
         client
     except:
         client = Client(**config)
-    if bv.session_data.has_key('client') and bv.session_data.has_key('fhash'):
+    state = bv.session_data.get('revsync')
+    if state:
         # close out the previous session
-        bv.session_data['client'].leave(bv.session_data['fhash'])
-    fhash = get_fhash(bv.file.filename)
-    bv.session_data['fhash'] = fhash
-    log_info('revsync: connecting with %s' % fhash)
-    client.join(fhash, revsync_callback(bv))
+        client.leave(state.fhash)
+        state.close()
+
+    state = bv.session_data['revsync'] = State(bv)
+    log_info('revsync: connecting with %s' % state.fhash)
+    client.join(state.fhash, revsync_callback(bv))
     log_info('revsync: connected!')
     t1 = threading.Thread(target=watch_cur_func, args=(bv,))
     t2 = threading.Thread(target=watch_syms, args=(bv,SymbolType.DataSymbol))
@@ -311,39 +329,36 @@ def revsync_load(bv):
     t3.start()
 
 def toggle_visits(bv):
-    global SHOW_VISITS
-    global COLOUR_NOW
-    SHOW_VISITS = not SHOW_VISITS
-    if SHOW_VISITS:
+    state = State.get(bv)
+    state.show_visits = not state.show_visits
+    if state.show_visits:
         log_info("Visit Visualization Enabled (Red)")
     else:
         log_info("Visit Visualization Disabled (Red)")
-    COLOUR_NOW = True
+    state.color_now = True
 
 def toggle_length(bv):
-    global SHOW_LENGTH
-    global COLOUR_NOW
-    SHOW_LENGTH = not SHOW_LENGTH
-    if SHOW_LENGTH:
+    state = State.get(bv)
+    state.show_length = not state.show_length
+    if state.show_length:
         log_info("Length Visualization Enabled (Blue)")
     else:
         log_info("Length Visualization Disabled (Blue)")
-    COLOUR_NOW = True
+    state.color_now = True
 
 def toggle_visitors(bv):
-    global SHOW_VISITORS
-    global COLOUR_NOW
-    SHOW_VISITORS = not SHOW_VISITORS
-    if SHOW_VISITORS:
+    state = State.get(bv)
+    state.show_visitors = not state.show_visitors
+    if state.show_visitors:
         log_info("Visitor Visualization Enabled (Green)")
     else:
         log_info("Visitor Visualization Disabled (Green)")
-    COLOUR_NOW = True
+    state.color_now = True
 
 def toggle_track(bv):
-    global TRACK_COVERAGE
-    TRACK_COVERAGE = not TRACK_COVERAGE
-    if TRACK_COVERAGE:
+    state = State.get(bv)
+    state.track_coverage = not state.track_coverage
+    if state.track_coverage:
         log_info("Tracking Enabled")
     else:
         log_info("Tracking Disabled")
