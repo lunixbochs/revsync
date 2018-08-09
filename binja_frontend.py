@@ -30,6 +30,8 @@ class State:
         self.running = True
         self.cmt_changes = dict()
         self.cmt_lock = Lock()
+        self.stackvar_changes = dict()
+        self.stackvar_lock = Lock()
 
     def close(self):
         self.running = False
@@ -137,12 +139,16 @@ def onmsg(bv, key, data, replay):
         addr = get_ea(bv, int(data['addr']))
         rename_symbol(bv, addr, data['text'])
     elif cmd == 'stackvar_renamed':
+        state.stackvar_lock.acquire()
         func_name = '???'
         func = get_func_by_addr(bv, data['addr'])
         if func:
             func_name = func.name
         log_info('revsync: <%s> %s %s %#x %s' % (user, cmd, func_name, data['offset'], data['name']))
         rename_stackvar(bv, data['addr'], data['offset'], data['name'])
+        # save stackvar changes using the tuple (func_addr, offset) as key
+        state.stackvar_changes[(data['addr'],data['offset'])] = data['name']
+        state.stackvar_lock.release()
     elif cmd == 'join':
         log_info('revsync: <%s> joined' % (user))
     elif cmd == 'coverage':
@@ -213,13 +219,10 @@ def watch_cur_func(bv):
     state = State.get(bv)
     last_func = get_cur_func()
     last_bb = get_cur_bb()
-    last_stackvars = {}
     last_time = time.time()
     #temp_length = 0
     last_bb_report = time.time()
     last_bb_addr = None
-    if last_func:
-        last_stackvars = stack_dict_from_list(last_func.vars)
     last_addr = None
     while state.running:
         now = time.time()
@@ -262,19 +265,24 @@ def watch_cur_func(bv):
                 """
                 state.cmt_lock.release()
 
-                # similar dance, but with stackvars 
+                # similar dance, but with stackvars
+                state.stackvar_lock.acquire()
                 stackvars = stack_dict_from_list(last_func.vars)
-                if stackvars != last_stackvars:
-                    # check for changed stack var names
-                    for offset, data in stackvars.items():
-                        old_data = last_stackvars.get(offset)
-                        if old_data != data:
-                            cur_name, cur_type = data
-                            old_name, old_type = old_data
-                            if old_name != cur_name:
-                                # stack var name changed, publish
-                                log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, cur_name))
-                                publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': cur_name})
+                for offset, data in stackvars.items():
+                    # stack variables are more difficult than comments to keep state on, since they
+                    # exist from the beginning, and have a type.  track each one.  start by tracking the first
+                    # time we see it.  if there are changes after that, publish.
+                    stackvar_name, stackvar_type = data
+                    stackvar_val = state.stackvar_changes.get((last_func.start,offset))
+                    if stackvar_val == None:
+                        # never seen before, start tracking
+                        state.stackvar_changes[(last_func.start,offset)] = stackvar_name
+                    elif stackvar_val != stackvar_name:
+                        # stack var name changed, publish
+                        log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, stackvar_name))
+                        publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': stackvar_name})
+                        state.stackvar_changes[(last_func.start,offset)] = stackvar_name
+                state.stackvar_lock.release()
 
                 if state.track_coverage:
                     cur_bb = get_cur_bb()
@@ -292,10 +300,6 @@ def watch_cur_func(bv):
             # update current function/addr info
             last_func = get_cur_func()
             last_bb = get_cur_bb()
-            if last_func:
-                last_stackvars = stack_dict_from_list(last_func.vars)
-            else:
-                last_stackvars = {} 
             last_addr = bv.offset
 
             if state.color_now:
