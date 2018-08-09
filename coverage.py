@@ -1,15 +1,52 @@
 from collections import defaultdict
 import math
 
+MIN = 60
+HOUR = 60 * MIN
+DAY = 24 * HOUR
+
+# def scale_band(x): return (x ** 2) / (2 * (x ** 2 - x) + 1)
+scale_band = lambda x: x
+def log_band(n, scale=1): return math.log(n + 2) / scale
+
+bands = [scale_band(x) for x in [0, 0.1, 0.2, 0.3, 0.4, 0.5]]
+
+VISIT_SCALE = math.log(1000)
+def visit_band(n):
+    if 1  <= n < 2:  return bands[1]
+    if 2  <= n < 5:  return bands[2]
+    if 5  <= n < 10: return bands[3]
+    if 10 <= n < 20: return bands[4]
+    if 20 <= n < 50: return bands[5]
+    if n >= 50: return max(log_band(n, VISIT_SCALE), 0.5)
+    return 0
+
+TIME_SCALE = math.log(48 * HOUR)
+def time_band(n):
+    n /= float(MIN)
+    if 0  <= n < 0.5: return bands[0]
+    if 0.5  <= n < 5: return bands[1]
+    if 5  <= n < 10:  return bands[2]
+    if 10 <= n < 20:  return bands[3]
+    if 20 <= n < 30:  return bands[4]
+    if 30 <= n < 60:  return bands[5]
+    if n >= 60: return max(log_band(n, TIME_SCALE), 0.5)
+    return bands[0]
+
+def user_band(n):
+    if 0  <= n < 2:  return bands[0]
+    if 2  <= n < 3:  return bands[1]
+    if 4  <= n < 6:  return bands[2]
+    if 6  <= n < 10: return bands[3]
+    if 10 <= n < 15: return bands[4]
+    if n >= 15:      return bands[5]
+    return bands[0]
+
 class Block:
     def __init__(self):
         self.time = 0
         self.visits = 0
         self.users = 1
-
-    @property
-    def log_time(self):
-        return math.log(self.time, 2)
 
     def dump(self):
         return {'l': self.time, 'v': self.visits, 'u': self.users}
@@ -24,24 +61,27 @@ class Block:
         self.visits += b['v']
         self.users += b['u']
 
-    def color(self, max_visits, max_time, max_users):
+    def color(self, visits, time, users):
         r = g = b = 0
-        if max_visits and self.visits > 0:
-            r = self.visits / max_visits
-        if max_time and self.time > 0:
-            g = self.log_time / max_time
-        if max_users and self.users > 0:
-            b = self.users / max_users
+        if visits:
+            r = visit_band(self.visits)
+        if time:
+            g = time_band(self.time)
+        if users:
+            b = user_band(self.users)
         if r == g == b == 0:
-            r = g = b = 0.5
+            return None
+
+        # this semi-softmax hedges against the colors ending up too close together and making grey
+        m = max((r, g, b))
+        r, g, b = r ** 2, g ** 2, b ** 2
+        total = float(r + g + b)
+        r, g, b = r / total * m, g / total * m, b / total * m
         return r, g, b
 
 class Blocks(defaultdict):
     def __init__(self):
         defaultdict.__init__(self, Block)
-        self.max_time = 0
-        self.max_visits = 0
-        self.max_users = 0
 
     def merge(self, blocks):
         for addr, block in blocks.items():
@@ -55,17 +95,11 @@ class Blocks(defaultdict):
         for addr, data in blocks.items():
             block = self[addr]
             block.update(data)
-            self.max_time = max(self.max_time, block.log_time)
-            self.max_visits = max(self.max_visits, block.visits)
-            self.max_users = max(self.max_users, block.users)
 
     def visit(self, addr, elapsed=0, visits=0):
         block = self[addr]
         block.time += elapsed
         block.visits += visits
-        self.max_time = max(self.max_time, block.log_time)
-        self.max_visits = max(self.max_visits, block.visits)
-        self.max_users = max(self.max_users, block.users)
 
 class Coverage:
     def __init__(self):
@@ -76,19 +110,12 @@ class Coverage:
     def visit_addr(self, addr, elapsed=0, visits=0):
         self.pending.visit(addr, elapsed, visits)
 
-    def max(self):
-        time = max(self.pending.max_time, self.local.max_time, self.shared.max_time)
-        visits = max(self.pending.max_visits, self.local.max_visits, self.shared.max_visits)
-        users = max(self.pending.max_users, self.local.max_users, self.shared.max_users)
-        return time, visits, users
-
     def color(self, addr, time=True, visits=True, users=True):
         block = self.shared.get(addr, None)
         if not block: block = self.local.get(addr, None)
         if not block: block = self.pending.get(addr, None)
         if not block: return None
-        tmax, vmax, umax = self.max()
-        return block.color(time and tmax, visits and vmax, users and umax)
+        return block.color(time=time, visits=visits, users=users)
 
     def update(self, blocks):
         self.shared.update(blocks)
