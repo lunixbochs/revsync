@@ -165,7 +165,7 @@ def revsync_rename(bv, addr):
 def colour_coverage(bv, cur_func):
     state = State.get(bv)
     for bb in cur_func.basic_blocks:
-        color = state.cov.color(get_can_addr(bb.start), visits=state.show_visits, time=state.show_length, users=state.show_visitors)
+        color = state.cov.color(get_can_addr(bv, bb.start), visits=state.show_visits, time=state.show_length, users=state.show_visitors)
         if color:
             r, g, b = color
             color = highlight.HighlightColor(red=int(r * MAX_COLOR), green=int(g * MAX_COLOR), blue=int(b * MAX_COLOR))
