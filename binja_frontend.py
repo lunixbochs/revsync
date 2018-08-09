@@ -11,6 +11,9 @@ from config import config
 from comments import Comments, NoChange
 from coverage import Coverage
 from threading import Lock
+from collections import namedtuple
+
+Struct = namedtuple('Struct', 'name typedef')
 
 class State:
     @staticmethod
@@ -29,13 +32,15 @@ class State:
         self.comments = Comments()
         self.fhash = get_fhash(bv.file.filename)
         self.running = True
-        self.cmt_changes = dict()
+        self.cmt_changes = {} 
         self.cmt_lock = Lock()
-        self.stackvar_changes = dict()
+        self.stackvar_changes = {} 
         self.stackvar_lock = Lock()
         self.data_syms = get_syms(bv, SymbolType.DataSymbol)
         self.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
         self.syms_lock = Lock()
+        self.structs = get_structs(bv) 
+        self.structs_lock = Lock()
 
     def close(self):
         self.running = False
@@ -69,6 +74,34 @@ def get_bb_by_addr(bv, addr):
         return bb[0]
     return None
 
+# in order to map IDA type sizes <-> binja types,
+# take the 'size' field and attempt to divine some
+# kind of type in binja that's close as possible.
+# right now, that means try to use uint8_t ... uint64_t,
+# anything bigger just make an array
+def get_type_by_size(bv, size):
+    typedef = None
+    if size <= 8:
+        try:
+            typedef, name = bv.parse_type_string('uint{}_t'.format(8*size))
+        except SyntaxError:
+            pass
+    else:
+        try:
+            typedef, name = bv.parse_type_string('char a[{}]'.format(8*size))
+        except SyntaxError:
+            pass
+    return typedef
+
+def get_structs(bv):
+    d = dict()
+    for name, typedef in bv.types.items():
+        if typedef.structure:
+            typeid = bv.get_type_id(name)
+            struct = Struct(name, typedef.structure)
+            d[typeid] = struct
+    return d
+
 def get_syms(bv, sym_type):
     # comes as list of Symbols
     syms = bv.get_symbols_of_type(sym_type)
@@ -82,6 +115,12 @@ def stack_dict_from_list(stackvars):
     d = {}
     for var in stackvars:
         d[var.storage] = (var.name, var.type)
+    return d
+
+def member_dict_from_list(members):
+    d = {}
+    for member in members:
+        d[member.name] = member
     return d
 
 def rename_symbol(bv, addr, name):
@@ -168,6 +207,19 @@ def onmsg(bv, key, data, replay):
         # save stackvar changes using the tuple (func_addr, offset) as key
         state.stackvar_changes[(data['addr'],data['offset'])] = data['name']
         state.stackvar_lock.release()
+    elif cmd == 'struc_created':
+        state.structs_lock.acquire()
+        # note: binja does not seem to appreciate the encoding of strings from redis
+        struct_name = data['struc_name'].encode('ascii', 'ignore')
+        struct = bv.get_type_by_name(struct_name)
+        # if a struct with the same name already exists, undefine it
+        if struct:
+            bv.undefine_user_type(struct_name)
+        struct = Structure()
+        bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
+        state.structs = get_structs(bv)
+        state.structs_lock.release()
+        log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
     elif cmd == 'join':
         log_info('revsync: <%s> joined' % (user))
     elif cmd == 'coverage':
@@ -212,6 +264,67 @@ def colour_coverage(bv, cur_func):
             bb.set_user_highlight(convert_color(color))
         else:
             bb.set_user_highlight(highlight.HighlightColor(red=74, blue=74, green=74))
+
+def watch_structs(bv):
+    """ Check structs for changes and publish diffs"""
+    state = State.get(bv)
+
+    while state.running:
+        state.structs_lock.acquire()
+        structs = get_structs(bv)
+        if structs != state.structs:
+            for struct_id, struct in structs.items():
+                last_struct = state.structs.get(struct_id)
+                struct_name = struct.name
+                if last_struct == None:
+                    # new struct created, publish
+                    log_info('revsync: user created struct %s' % struct_name)
+                    # binja can't really handle unions at this time
+                    publish(bv, {'cmd': 'struc_created', 'struc_name': str(struct_name), 'is_union': False})
+                    # if there are already members, publish them
+                    members = member_dict_from_list(struct.typedef.members)
+                    if members:
+                        for member_name, member_def in members.items():
+                            publish(bv, {'cmd': 'struc_member_created', 'struc_name': str(struct_name), 'offset': member_def.offset, 'member_name': member_name, 'size': member_def.type.width, 'flag': None})
+                    continue
+                last_name = last_struct.name
+                if last_name != struct_name:
+                    # struct renamed, publish
+                    log_info('revsync: user renamed struct %s' % struct_name)
+                    publish(bv, {'cmd': 'struc_renamed', 'old_name': str(last_name), 'new_name': str(struct_name)})
+                
+                # check for member differences
+                members = member_dict_from_list(struct.typedef.members)
+                last_members = member_dict_from_list(last_struct.typedef.members)
+
+                # first checks for deletions
+                removed_members = set(last_members.keys()) - set(members.keys())
+                for member in removed_members:
+                    log_info('revsync: user deleted struct member %s in struct %s' % (last_members[member].name, str(struct_name)))
+                    publish(bv, {'cmd': 'struc_member_deleted', 'struc_name': str(struct_name), 'offset': last_members[member].offset})
+
+                # now check for additions
+                new_members = set(members.keys()) - set(last_members.keys())
+                for member in new_members:
+                    log_info('revsync: user added struct member %s in struct %s' % (members[member].name, str(struct_name)))
+                    publish(bv, {'cmd': 'struc_member_created', 'struc_name': str(struct_name), 'offset': members[member].offset, 'member_name': str(member), 'size': members[member].type.width, 'flag': None})
+
+                # check for changes among intersection of members
+                intersec = set(members.keys()) & set(last_members.keys())
+                for m in intersec:
+                    if members[m].type.width != last_members[m].type.width:
+                        # type (i.e., size) changed
+                        log_info('revsync: user changed struct member %s in struct %s' % (members[m].name, str(struct_name)))
+                        publish(bv, {'cmd': 'struc_member_changed', 'struc_name': str(struct_name), 'offset': members[m].offset, 'size': members[m].type.width})
+
+            for struct_id, struct_def in state.structs.items():
+                if structs.get(struct_id) == None:
+                    # struct deleted, publish
+                    log_info('revsync: user deleted struct %s' % struct_def.name)
+                    publish(bv, {'cmd': 'struc_deleted', 'struc_name': str(struct_def.name)})
+        state.structs = get_structs(bv)
+        state.structs_lock.release()
+        time.sleep(0.5)
 
 def watch_syms(bv, sym_type):
     """ Watch symbols of a given type (e.g. DataSymbol) for changes and publish diffs """
@@ -335,7 +448,7 @@ def watch_cur_func(bv):
             last_bb = get_cur_bb()
             last_addr = bv.offset
 
-            if state.color_now:
+            if state.color_now and last_func != None:
                 colour_coverage(bv, last_func)
                 state.color_now = False
 
@@ -358,12 +471,15 @@ def revsync_load(bv):
     t1 = threading.Thread(target=watch_cur_func, args=(bv,))
     t2 = threading.Thread(target=watch_syms, args=(bv,SymbolType.DataSymbol))
     t3 = threading.Thread(target=watch_syms, args=(bv,SymbolType.FunctionSymbol))
+    t4 = threading.Thread(target=watch_structs, args=(bv,))
     t1.daemon = True
     t2.daemon = True
     t3.daemon = True
+    t4.daemon = True
     t1.start()
     t2.start()
     t3.start()
+    t4.start()
 
 def toggle_visits(bv):
     state = State.get(bv)

@@ -13,6 +13,13 @@ cmd_hash_keys = {
     'area_comment': ('addr',),
     'rename': ('addr',),
     'stackvar_renamed': ('addr', 'offset', 'name',)
+    'struc_created': ('struc_name', 'is_union',),
+    'struc_deleted': ('struc_name',),
+    'struc_renamed': ('old_name', 'new_name',),
+    'struc_member_created': ('struc_name', 'offset', 'member_name', 'size', 'flag',),
+    'struc_member_deleted': ('struc_name', 'offset',),
+    'struc_member_renamed': ('struc_name', 'offset', 'member_name',),
+    'struc_member_changed': ('struc_name', 'offset', 'size',),
 }
 key_dec = {
     'c': 'cmd',
