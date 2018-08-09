@@ -66,9 +66,9 @@ class Block:
         if visits:
             r = visit_band(self.visits)
         if time:
-            g = time_band(self.time)
+            b = time_band(self.time)
         if users:
-            b = user_band(self.users)
+            g = user_band(self.users)
         if r == g == b == 0:
             return None
 
