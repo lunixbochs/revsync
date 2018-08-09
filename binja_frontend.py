@@ -1,5 +1,6 @@
 import hashlib
 from time import sleep
+from collections import defaultdict
 
 from time import time
 from binaryninja import *
@@ -149,12 +150,21 @@ def revsync_rename(bv, addr):
     rename_symbol(bv, addr, name)
 
 def colour_coverage(bv, cur_func):
-    cov = bb_coverage[bv]
+    cov = coverage[bv]
     for bb in cur_func.basic_blocks:
-        color = cov.color(get_can_addr(bb.addr))
+        color = cov.color(bb.start)
         if color:
             r, g, b = color
-            color = highlight.HighlightColor(red=r, green=g, blue=b)
+            if not SHOW_VISITS:
+                r = 0
+            if not SHOW_LENGTH:
+                b = 0
+            if not SHOW_VISITORS:
+                g = 0
+            if r == 0 and b == 0 and g == 0:
+                color = highlight.HighlightColor(red=74, green=74, blue=74)
+            else:
+                color = highlight.HighlightColor(red=int(r), green=int(g), blue=int(b))
             bb.set_user_highlight(color)
 
 def watch_syms(bv, sym_type):
@@ -195,14 +205,14 @@ def watch_cur_func(bv):
     last_stackvars = {}
     last_time = time()
     #temp_length = 0
-    last_bb_report = time.time()
+    last_bb_report = time()
     last_bb_addr = None
     if last_func:
         last_comments = last_func.comments
         last_stackvars = stack_dict_from_list(last_func.vars)
     last_addr = None
     while True:
-        now = time.time()
+        now = time()
         if TRACK_COVERAGE and now - last_bb_report >= BB_REPORT:
             last_bb_report = now
             push_cv(bv, {'b': cov.flush()})
@@ -259,13 +269,13 @@ def watch_cur_func(bv):
                                 publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': cur_name})
 
                 if TRACK_COVERAGE:
-                    cov = coverage[self.bv]
+                    cov = coverage[bv]
                     cur_bb = get_cur_bb()
                     if cur_bb != last_bb:
                         COLOUR_NOW = True
                         now = time()
                         if last_bb_addr is not None:
-                            cov.visit(last_bb_addr, elapsed=now - last_time, visits=1)
+                            cov.visit_addr(last_bb_addr, elapsed=now - last_time, visits=1)
                         last_time = now
                         if cur_bb is None:
                             last_bb_addr = None
@@ -284,7 +294,7 @@ def watch_cur_func(bv):
             last_addr = bv.offset
 
             if COLOUR_NOW:
-                cov = coverage[self.bv]
+                cov = coverage[bv]
                 colour_coverage(bv, last_func)
                 COLOUR_NOW = False
 

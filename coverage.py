@@ -27,11 +27,11 @@ class Block:
     def color(self, max_visits, max_time, max_users):
         r = g = b = 0.5
         if max_visits and self.visits > 0:
-            r = self.visits / max_visits
+            r = (self.visits * 0x96) / max_visits
         if max_time and self.time > 0:
-            g = self.log_time / max_time
+            g = (self.log_time * 0x96) / max_time
         if max_users and self.users > 0:
-            b = self.users / max_users
+            b = (self.users * 0x96) / max_users
         return r, g, b
 
 class Blocks(defaultdict):
@@ -49,7 +49,7 @@ class Blocks(defaultdict):
             else:
                 self[addr] = block
 
-    def update(self, data):
+    def update(self, blocks):
         for addr, data in blocks.items():
             block = self[addr]
             block.update(data)
