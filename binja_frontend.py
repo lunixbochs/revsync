@@ -9,6 +9,7 @@ from client import Client
 from config import config
 from comments import Comments, NoChange
 from coverage import Coverage
+from threading import Lock
 
 class State:
     @staticmethod
@@ -27,6 +28,8 @@ class State:
         self.comments = Comments()
         self.fhash = get_fhash(bv.file.filename)
         self.running = True
+        self.cmt_changes = dict()
+        self.cmt_lock = Lock()
 
     def close(self):
         self.running = False
@@ -115,6 +118,7 @@ def onmsg(bv, key, data, replay):
     cmd, user = data['cmd'], data['user']
     ts = int(data.get('ts', 0))
     if cmd == 'comment':
+        state.cmt_lock.acquire()
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
         addr = get_ea(bv, int(data['addr']))
         func = get_func_by_addr(bv, addr)
@@ -122,6 +126,8 @@ def onmsg(bv, key, data, replay):
         if func is not None:
             text = state.comments.set(addr, user, data['text'], ts)
             func.set_comment(addr, text)
+            state.cmt_changes[addr] = text
+        state.cmt_lock.release()
     elif cmd == 'extra_comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
     elif cmd == 'area_comment':
@@ -207,14 +213,12 @@ def watch_cur_func(bv):
     state = State.get(bv)
     last_func = get_cur_func()
     last_bb = get_cur_bb()
-    last_comments = {}
     last_stackvars = {}
     last_time = time.time()
     #temp_length = 0
     last_bb_report = time.time()
     last_bb_addr = None
     if last_func:
-        last_comments = last_func.comments
         last_stackvars = stack_dict_from_list(last_func.vars)
     last_addr = None
     while state.running:
@@ -229,36 +233,34 @@ def watch_cur_func(bv):
         else:
             # were we just in a function?
             if last_func:
+                state.cmt_lock.acquire()
                 comments = last_func.comments
-                if comments != last_comments:
-                    # check for changed comments
-                    for addr, text in comments.items():
-                        if last_comments is None:
-                            # no previous comment at that addr, publish
-                            try:
-                                addr = get_can_addr(bv, addr)
-                                changed = state.comments.parse_comment_update(addr, client.nick, text)
-                                log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
-                                publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
-                            except NoChange:
-                                pass
-                            continue
-                        elif last_comments.get(addr) != text:
-                            # changed comment, publish
-                            try:
-                                addr = get_can_addr(bv, addr)
-                                changed = state.comments.parse_comment_update(addr, client.nick, text)
-                                log_info('resync: user changed comment: %#x, %s' % (addr, changed))
-                                publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
-                            except NoChange:
-                                pass
-                    # check for removed comments
-                    if last_comments:
-                        removed = set(last_comments.keys()) - set(comments.keys())
-                        for addr in removed:
-                            addr = get_can_addr(bv, addr)
-                            log_info('revsync: user removed comment: %#x' % addr)
-                            publish(bv, {'cmd': 'comment', 'addr': addr, 'text': ''})
+                # check for changed comments
+                for cmt_addr, cmt in comments.items():
+                    last_cmt = state.cmt_changes.get(cmt_addr)
+                    if last_cmt == None or last_cmt != cmt:
+                        # new/changed comment, publish
+                        try:
+                            addr = get_can_addr(bv, cmt_addr)
+                            changed = state.comments.parse_comment_update(addr, client.nick, cmt)
+                            log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
+                            publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
+                            state.cmt_changes[cmt_addr] = changed
+                        except NoChange:
+                            pass
+                        continue
+
+                # TODO: this needs to be fixed later
+                """
+                # check for removed comments
+                if last_comments:
+                    removed = set(last_comments.keys()) - set(comments.keys())
+                    for addr in removed:
+                        addr = get_can_addr(bv, addr)
+                        log_info('revsync: user removed comment: %#x' % addr)
+                        publish(bv, {'cmd': 'comment', 'addr': addr, 'text': ''})
+                """
+                state.cmt_lock.release()
 
                 # similar dance, but with stackvars 
                 stackvars = stack_dict_from_list(last_func.vars)
@@ -291,10 +293,8 @@ def watch_cur_func(bv):
             last_func = get_cur_func()
             last_bb = get_cur_bb()
             if last_func:
-                last_comments = last_func.comments
                 last_stackvars = stack_dict_from_list(last_func.vars)
             else:
-                last_comments = {}
                 last_stackvars = {} 
             last_addr = bv.offset
 
