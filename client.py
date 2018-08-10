@@ -59,9 +59,8 @@ class Client:
                     if data.get('uuid') == self.uuid:
                         continue
                     with self.nolock:
-                        no = self.nosend[key]
-                        no = no[-200:]
-                        no.append(dtokey(data))
+                        self.nosend[key] = self.nosend[key][-200:]
+                        self.nosend[key].append(dtokey(data))
                     cb(key, data)
                 elif item['type'] == 'subscribe':
                     decoded = []
