@@ -70,17 +70,17 @@ def onmsg(key, data, replay=False):
         ts = int(data.get('ts', 0))
         cmd, user = data['cmd'], data['user']
         if cmd == 'comment':
-            print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+            print 'revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text'])
             text = comments.set(ea, user, str(data['text']), ts)
             MakeComm(ea, text)
         elif cmd == 'extra_comment':
-            print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+            print 'revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text'])
             text = comments_extra.set(ea, user, str(data['text']), ts)
             MakeRptCmt(ea, text)
         elif cmd == 'area_comment':
             print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
         elif cmd == 'rename':
-            print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+            print 'revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text'])
             MakeName(ea, str(data['text']))
         elif cmd == 'join':
             print 'revsync: <%s> joined' % (user)
@@ -88,7 +88,7 @@ def onmsg(key, data, replay=False):
                     'struc_renamed', 'struc_member_created', 'struc_member_deleted',
                     'struc_member_renamed', 'struc_member_changed', 'coverage']:
             if 'addr' in data:
-                print 'revsync: <%s> %s %#x (not supported in IDA revsync)' % (user, cmd, data['addr'])
+                print 'revsync: <%s> %s %#x (not supported in IDA revsync)' % (user, cmd, ea)
             else:
                 print 'revsync: <%s> %s (not supported in IDA revsync)' % (user, cmd)
         else:
