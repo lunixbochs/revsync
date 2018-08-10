@@ -48,7 +48,8 @@ def remove_ttl(a):
 
 class Client:
     def __init__(self, host, port, nick, password=None):
-        self.r = redis.StrictRedis(host=host, port=port, password=password)
+        self.r = redis.StrictRedis(host=host, port=port, password=password, socket_timeout=5, socket_connect_timeout=3)
+        self.r.info()
         self.nick = nick_filter.sub('_', nick)
         self.ps = {}
         self.nolock = threading.Lock()
