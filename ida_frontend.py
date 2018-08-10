@@ -19,10 +19,15 @@ ida_reserved_prefix = (
 fhash = None
 auto_wait = False
 client = Client(**config)
+netnode = idaapi.netnode()
+NETNODE_NAME = '$ revsync-fhash'
 
 ### Helper Functions
 
-def get_fhash():
+def cached_fhash():
+    return netnode.getblob(0, 'I')
+
+def read_fhash():
     filename = idaapi.get_root_filename()
     if filename is None:
         return None
@@ -49,7 +54,7 @@ def onmsg_safe(key, data, replay=False):
     idaapi.execute_sync(tmp, MFF_WRITE)
 
 def onmsg(key, data, replay=False):
-    if key != fhash or key != get_fhash():
+    if key != fhash or key != cached_fhash():
         print 'revsync: hash mismatch, dropping command'
         return
 
@@ -78,7 +83,7 @@ def onmsg(key, data, replay=False):
 def publish(data, **kwargs):
     if not autoIsOk():
         return
-    if fhash == get_fhash():
+    if fhash == netnode.getblob(0, 'I'):
         client.publish(fhash, data, **kwargs)
 
 ### IDA Hook Classes ###
@@ -144,7 +149,7 @@ def on_load():
     global fhash
     if fhash:
         client.leave(fhash)
-    fhash = get_fhash()
+    fhash = cached_fhash()
     print 'revsync: connecting with', fhash
     client.join(fhash, onmsg_safe)
 
@@ -157,8 +162,17 @@ def wait_for_analysis():
     return 1000
 
 def on_open():
-    print 'revsync: file opened:', idaapi.get_root_filename()
     global auto_wait
+    global fhash
+    print 'revsync: file opened:', idaapi.get_root_filename()
+    netnode.create(NETNODE_NAME)
+    try: fhash = netnode.getblob(0, 'I')
+    except: pass
+    if not fhash:
+        fhash = read_fhash()
+        try: ret = netnode.setblob(fhash, 0, 'I')
+        except: print 'saving fhash failed, this will probably break revsync'
+
     if autoIsOk():
         on_load()
         auto_wait = False
