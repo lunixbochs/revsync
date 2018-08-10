@@ -29,7 +29,7 @@ def decode(data):
     return dict((key_dec.get(k, k), v) for k, v in d.items())
 
 def dtokey(d):
-    return tuple(((k, v) for k, v in d.items() if k not in ('user', 'ts')))
+    return tuple(((k, v) for k, v in sorted(d.items()) if k not in ('user', 'ts', 'uuid')))
 
 class Client:
     def __init__(self, host, port, nick, password=None):
@@ -59,7 +59,9 @@ class Client:
                     if data.get('uuid') == self.uuid:
                         continue
                     with self.nolock:
-                        self.nosend[key].append(dtokey(data))
+                        no = self.nosend[key]
+                        no = no[-200:]
+                        no.append(dtokey(data))
                     cb(key, data)
                 elif item['type'] == 'subscribe':
                     decoded = []
