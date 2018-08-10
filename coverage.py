@@ -57,9 +57,9 @@ class Block:
         self.users += block.users
 
     def update(self, b):
-        self.time += b['l']
-        self.visits += b['v']
-        self.users += b['u']
+        self.time = int(b['l'])
+        self.visits = int(b['v'])
+        self.users = int(b['u'])
 
     def color(self, visits, time, users):
         r = g = b = 0
@@ -93,7 +93,7 @@ class Blocks(defaultdict):
 
     def update(self, blocks):
         for addr, data in blocks.items():
-            block = self[addr]
+            block = self[int(addr)]
             block.update(data)
 
     def visit(self, addr, elapsed=0, visits=0):
@@ -111,17 +111,26 @@ class Coverage:
         self.pending.visit(addr, elapsed, visits)
 
     def color(self, addr, time=True, visits=True, users=True):
-        block = self.shared.get(addr, None)
-        if not block: block = self.local.get(addr, None)
-        if not block: block = self.pending.get(addr, None)
-        if not block: return None
+        # Sum blocks from global, local and pending for current colouring
+        sblock = self.shared.get(addr, None)
+        lblock = self.local.get(addr, None)
+        pblock = self.pending.get(addr, None)
+        if not sblock and not lblock and not pblock:
+            return None
+        block = Block()
+        if sblock: block.add(sblock)
+        if lblock: block.add(lblock)
+        if pblock: block.add(pblock)
         return block.color(time=time, visits=visits, users=users)
 
     def update(self, blocks):
+        # Update Global Coverage and Reset Local Coverage
         self.shared.update(blocks)
+        self.local = Blocks()
 
     def flush(self):
-        pending = {addr: block.dump() for addr, block in self.local.items()}
+        # Report pending coverage and merge with local
+        pending = {addr: block.dump() for addr, block in self.pending.items()}
         self.local.merge(self.pending)
         self.pending = Blocks()
         return pending

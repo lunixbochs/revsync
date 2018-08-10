@@ -52,7 +52,7 @@ while True:
             print "Publish Results"
             for c in cov.keys():
                 cov[c]["u"] = len(cov[c]["u"])
-            data = {"c": "coverage", "u": "COV", "b": json.dumps(cov)}
+            data = {"c": "coverage", "u": "COV", "b": cov}
             data = json.dumps(data, separators=(',', ':'), sort_keys=True)
             r.publish(k, data)
     else:

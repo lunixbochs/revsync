@@ -328,7 +328,6 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> joined' % (user))
     elif cmd == 'coverage':
         log_info("Updating Global Coverage")
-        # FIXME: don't double-json-encode data['blocks']
         state.cov.update(json.loads(data['blocks']))
         state.color_now = True
     else:
@@ -552,9 +551,9 @@ def watch_cur_func(bv):
             last_bb = get_cur_bb()
             last_addr = bv.offset
 
-            if state.color_now and last_func != None:
-                colour_coverage(bv, last_func)
-                state.color_now = False
+        if state.color_now and last_func != None:
+            colour_coverage(bv, last_func)
+            state.color_now = False
 
 def revsync_load(bv):
     global client
