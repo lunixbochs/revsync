@@ -34,6 +34,7 @@ try:
         write_config(host_f.result, port_f.result, nick_f.result, password_f.result)
         import config
     import binja_frontend
+    #import binja_coverage
     good = True
 except ImportError:
     pass

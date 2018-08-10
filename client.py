@@ -15,7 +15,14 @@ cmd_hash_keys = {
     'extra_comment': ('addr',),
     'area_comment': ('addr',),
     'rename': ('addr',),
-    'stackvar_renamed': ('addr', 'offset', 'name',)
+    'stackvar_renamed': ('addr', 'offset', 'name',),
+    'struc_created': ('struc_name', 'is_union',),
+    'struc_deleted': ('struc_name',),
+    'struc_renamed': ('old_name', 'new_name',),
+    'struc_member_created': ('struc_name', 'offset', 'member_name', 'size', 'flag',),
+    'struc_member_deleted': ('struc_name', 'offset',),
+    'struc_member_renamed': ('struc_name', 'offset', 'member_name',),
+    'struc_member_changed': ('struc_name', 'offset', 'size',),
 }
 key_dec = {
     'c': 'cmd',
@@ -23,6 +30,7 @@ key_dec = {
     'u': 'user',
     't': 'text',
     'i': 'uuid',
+    'b': 'blocks'
 }
 key_enc = dict((v, k) for k, v in key_dec.items())
 nick_filter = re.compile(r'[^a-zA-Z0-9_\-]')
@@ -137,3 +145,10 @@ class Client:
         if perm:
             self.r.rpush(key, data)
         self.r.publish(key, data)
+
+    def push(self, key, data, send_uuid=True):
+        if send_uuid:
+            data['uuid'] = self.uuid
+        data = dict((key_enc.get(k, k), v) for k, v in data.items())
+        data = json.dumps(data, separators=(',', ':'), sort_keys=True)
+        self.r.lpush(key, data)
