@@ -84,6 +84,13 @@ def onmsg(key, data, replay=False):
             MakeName(ea, str(data['text']))
         elif cmd == 'join':
             print 'revsync: <%s> joined' % (user)
+        elif cmd in ['stackvar_renamed', 'struc_created', 'struc_deleted',
+                    'struc_renamed', 'struc_member_created', 'struc_member_deleted',
+                    'struc_member_renamed', 'struc_member_changed', 'coverage']:
+            if 'addr' in data:
+                print 'revsync: <%s> %s %#x (not supported in IDA revsync)' % (user, cmd, data['addr'])
+            else:
+                print 'revsync: <%s> %s (not supported in IDA revsync)' % (user, cmd)
         else:
             print 'revsync: unknown cmd', data
     finally:
