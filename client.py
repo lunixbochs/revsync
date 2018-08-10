@@ -3,8 +3,11 @@ import json
 import re
 import redis
 import threading
+import time
 import traceback
 import uuid
+
+TTL = 2
 
 hash_keys = ('cmd', 'user')
 cmd_hash_keys = {
@@ -31,6 +34,10 @@ def decode(data):
 def dtokey(d):
     return tuple(((k, v) for k, v in sorted(d.items()) if k not in ('user', 'ts', 'uuid')))
 
+def remove_ttl(a):
+    now = time.time()
+    return [d for d in a if now - d[0] < TTL]
+
 class Client:
     def __init__(self, host, port, nick, password=None):
         self.r = redis.StrictRedis(host=host, port=port, password=password)
@@ -42,10 +49,14 @@ class Client:
 
     def debounce(self, no, data):
         dkey = dtokey(data)
+        now = time.time()
         with self.nolock:
-            if dkey in no:
-                no.remove(dkey)
-                return True
+            for data in no:
+                ts = data[0]
+                key = data[1:]
+                if dkey == key and now - ts < TTL:
+                    no.remove(data)
+                    return True
         return False
 
     def _sub_thread(self, ps, cb, key):
@@ -59,8 +70,8 @@ class Client:
                     if data.get('uuid') == self.uuid:
                         continue
                     with self.nolock:
-                        self.nosend[key] = self.nosend[key][-200:]
-                        self.nosend[key].append(dtokey(data))
+                        self.nosend[key] = remove_ttl(self.nosend[key])
+                        self.nosend[key].append((time.time(),) + dtokey(data))
                     cb(key, data)
                 elif item['type'] == 'subscribe':
                     decoded = []
@@ -87,7 +98,7 @@ class Client:
                     for data in reversed(state):
                         try:
                             with self.nolock:
-                                self.nosend[key].append(dtokey(data))
+                                self.nosend[key].append((time.time(),) + dtokey(data))
                             cb(key, data, replay=True)
                         except Exception:
                             print('error replaying history', data)

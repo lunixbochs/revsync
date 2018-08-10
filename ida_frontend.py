@@ -22,6 +22,8 @@ client = Client(**config)
 netnode = idaapi.netnode()
 NETNODE_NAME = '$ revsync-fhash'
 
+hook1 = hook2 = hook3 = None
+
 ### Helper Functions
 
 def cached_fhash():
@@ -58,27 +60,36 @@ def onmsg(key, data, replay=False):
         print 'revsync: hash mismatch, dropping command'
         return
 
-    if 'addr' in data:
-        ea = get_ea(data['addr'])
-    ts = int(data.get('ts', 0))
-    cmd, user = data['cmd'], data['user']
-    if cmd == 'comment':
-        print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        text = comments.set(ea, user, str(data['text']), ts)
-        MakeComm(ea, text)
-    elif cmd == 'extra_comment':
-        print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        text = comments_extra.set(ea, user, str(data['text']), ts)
-        MakeRptCmt(ea, text)
-    elif cmd == 'area_comment':
-        print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
-    elif cmd == 'rename':
-        print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
-        MakeName(ea, str(data['text']))
-    elif cmd == 'join':
-        print 'revsync: <%s> joined' % (user)
-    else:
-        print 'revsync: unknown cmd', data
+    if hook1: hook1.unhook()
+    if hook2: hook2.unhook()
+    if hook3: hook3.unhook()
+
+    try:
+        if 'addr' in data:
+            ea = get_ea(data['addr'])
+        ts = int(data.get('ts', 0))
+        cmd, user = data['cmd'], data['user']
+        if cmd == 'comment':
+            print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+            text = comments.set(ea, user, str(data['text']), ts)
+            MakeComm(ea, text)
+        elif cmd == 'extra_comment':
+            print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+            text = comments_extra.set(ea, user, str(data['text']), ts)
+            MakeRptCmt(ea, text)
+        elif cmd == 'area_comment':
+            print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
+        elif cmd == 'rename':
+            print 'revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text'])
+            MakeName(ea, str(data['text']))
+        elif cmd == 'join':
+            print 'revsync: <%s> joined' % (user)
+        else:
+            print 'revsync: unknown cmd', data
+    finally:
+        if hook1: hook1.hook()
+        if hook2: hook2.hook()
+        if hook3: hook3.hook()
 
 def publish(data, **kwargs):
     if not autoIsOk():
