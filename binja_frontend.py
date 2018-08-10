@@ -212,9 +212,20 @@ def watch_cur_func(bv):
                 last_stackvars = {} 
             last_addr = bv.offset
 
+def do_analysis_and_wait(bv):
+    log_info('revsync: running analysis update...')
+    bv.update_analysis_and_wait()
+    log_info('revsync: analysis finished.')
+    return
 
 def revsync_load(bv):
     global client
+
+    # lets ensure auto-analysis is finished by forcing another analysis
+    t0 = threading.Thread(target=do_analysis_and_wait, args=(bv,))
+    t0.start()
+    t0.join()
+
     try:
         client
     except:
