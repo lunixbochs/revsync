@@ -3,7 +3,13 @@ revsync
 
 Realtime IDA Pro and Binary Ninja sync plugin
 
-Reliably syncs symbol names and comments, and that's it!
+Syncs:
+
+- Comments
+- Symbol names
+- Stack var names
+- Structs
+- Code coverage (how much time was spent looking at a block)
 
 IDA Pro Installation
 --------------------
