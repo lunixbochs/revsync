@@ -6,6 +6,8 @@ import threading
 import time
 import traceback
 import uuid
+import base64
+import binascii
 
 TTL = 2
 
@@ -54,7 +56,7 @@ class Client:
         self.ps = {}
         self.nolock = threading.Lock()
         self.nosend = defaultdict(list)
-        self.uuid = uuid.uuid4().hex.decode('hex').encode('base64').strip()
+        self.uuid = str(base64.b64encode(binascii.unhexlify(uuid.uuid4().hex)).decode('ascii'))
 
     def debounce(self, no, data):
         dkey = dtokey(data)

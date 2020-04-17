@@ -10,6 +10,7 @@ from client import Client
 from config import config
 from comments import comments, comments_extra, NoChange
 
+
 ida_reserved_prefix = (
     'sub_', 'locret_', 'loc_', 'off_', 'seg_', 'asc_', 'byte_', 'word_',
     'dword_', 'qword_', 'byte3_', 'xmmword_', 'ymmword_', 'packreal_',
@@ -27,7 +28,7 @@ hook1 = hook2 = hook3 = None
 ### Helper Functions
 
 def cached_fhash():
-    return netnode.getblob(0, 'I')
+    return netnode.getblob(0, 'I').decode('ascii')
 
 def read_fhash():
     filename = idaapi.get_root_filename()
@@ -57,7 +58,7 @@ def onmsg_safe(key, data, replay=False):
 
 def onmsg(key, data, replay=False):
     if key != fhash or key != cached_fhash():
-        print 'revsync: hash mismatch, dropping command'
+        print('revsync: hash mismatch, dropping command')
         return
 
     if hook1: hook1.unhook()
@@ -70,44 +71,44 @@ def onmsg(key, data, replay=False):
         ts = int(data.get('ts', 0))
         cmd, user = data['cmd'], data['user']
         if cmd == 'comment':
-            print 'revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text'])
+            print('revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text']))
             text = comments.set(ea, user, str(data['text']), ts)
-            MakeComm(ea, text)
+            set_cmt(ea, text, 0)
         elif cmd == 'extra_comment':
-            print 'revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text'])
+            print('revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text']))
             text = comments_extra.set(ea, user, str(data['text']), ts)
-            MakeRptCmt(ea, text)
+            set_cmt(ea, text, 1)
         elif cmd == 'area_comment':
-            print 'revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text'])
+            print('revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text']))
         elif cmd == 'rename':
-            print 'revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text'])
-            MakeName(ea, str(data['text']))
+            print('revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text']))
+            set_name(ea, str(data['text']))
         elif cmd == 'join':
-            print 'revsync: <%s> joined' % (user)
+            print('revsync: <%s> joined' % (user))
         elif cmd in ['stackvar_renamed', 'struc_created', 'struc_deleted',
                     'struc_renamed', 'struc_member_created', 'struc_member_deleted',
                     'struc_member_renamed', 'struc_member_changed', 'coverage']:
             if 'addr' in data:
-                print 'revsync: <%s> %s %#x (not supported in IDA revsync)' % (user, cmd, ea)
+                print('revsync: <%s> %s %#x (not supported in IDA revsync)' % (user, cmd, ea))
             else:
-                print 'revsync: <%s> %s (not supported in IDA revsync)' % (user, cmd)
+                print('revsync: <%s> %s (not supported in IDA revsync)' % (user, cmd))
         else:
-            print 'revsync: unknown cmd', data
+            print('revsync: unknown cmd', data)
     finally:
         if hook1: hook1.hook()
         if hook2: hook2.hook()
         if hook3: hook3.hook()
 
 def publish(data, **kwargs):
-    if not autoIsOk():
+    if not auto_is_ok():
         return
-    if fhash == netnode.getblob(0, 'I'):
+    if fhash == netnode.getblob(0, 'I').decode('ascii'):
         client.publish(fhash, data, **kwargs)
 
 ### IDA Hook Classes ###
 
 def on_renamed(ea, new_name, local_name):
-    if isLoaded(ea) and not new_name.startswith(ida_reserved_prefix):
+    if is_loaded(ea) and not new_name.startswith(ida_reserved_prefix):
         publish({'cmd': 'rename', 'addr': get_can_addr(ea), 'text': new_name})
 
 def on_auto_empty_finally():
@@ -137,7 +138,7 @@ class IDBHooks(IDB_Hooks):
         return IDB_Hooks.auto_empty_finally(self)
 
     def cmt_changed(self, ea, repeatable):
-        cmt = GetCommentEx(ea, repeatable)
+        cmt = get_cmt(ea, repeatable)
         try:
             changed = comments.parse_comment_update(ea, client.nick, cmt)
             publish({'cmd': 'comment', 'addr': get_can_addr(ea), 'text': changed or ''}, send_uuid=False)
@@ -147,7 +148,7 @@ class IDBHooks(IDB_Hooks):
 
     def extra_cmt_changed(self, ea, line_idx, repeatable):
         try:
-            cmt = GetCommentEx(ea, repeatable)
+            cmt = get_cmt(ea, repeatable)
             changed = comments_extra.parse_comment_update(ea, client.nick, cmt)
             publish({'cmd': 'extra_comment', 'addr': get_can_addr(ea), 'line': line_idx, 'text': changed or ''}, send_uuid=False)
         except NoChange:
@@ -168,12 +169,12 @@ def on_load():
     if fhash:
         client.leave(fhash)
     fhash = cached_fhash()
-    print 'revsync: connecting with', fhash
+    print('revsync: connecting with', fhash)
     client.join(fhash, onmsg_safe)
 
 def wait_for_analysis():
     global auto_wait
-    if autoIsOk():
+    if auto_is_ok():
         auto_wait = False
         on_load()
         return -1
@@ -182,21 +183,21 @@ def wait_for_analysis():
 def on_open():
     global auto_wait
     global fhash
-    print 'revsync: file opened:', idaapi.get_root_filename()
+    print('revsync: file opened:', idaapi.get_root_filename())
     netnode.create(NETNODE_NAME)
-    try: fhash = netnode.getblob(0, 'I')
-    except: pass
+    try: fhash = netnode.getblob(0, 'I').decode('ascii')
+    except: fhash = None
     if not fhash:
         fhash = read_fhash()
-        try: ret = netnode.setblob(fhash, 0, 'I')
-        except: print 'saving fhash failed, this will probably break revsync'
+        try: ret = netnode.setblob(fhash.encode('ascii'), 0, 'I')
+        except: print('saving fhash failed, this will probably break revsync')
 
-    if autoIsOk():
+    if auto_is_ok():
         on_load()
         auto_wait = False
     else:
         auto_wait = True
-        print 'revsync: waiting for auto analysis'
+        print('revsync: waiting for auto analysis')
         if not hasattr(IDP_Hooks, 'auto_empty_finally'):
             idaapi.register_timer(1000, wait_for_analysis)
 
@@ -230,4 +231,4 @@ hook1.hook()
 hook2.hook()
 hook3.hook()
 idaapi.register_timer(1000, setup)
-print 'revsync: starting setup timer'
+print('revsync: starting setup timer')
