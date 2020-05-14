@@ -37,10 +37,13 @@ Binary Ninja Installation
 -------------------------
 
 - Install via the Plugin Manager (CMD/CTL-SHIFT-M)
+
 or:
+
 - Clone to [your plugin folder](https://github.com/Vector35/binaryninja-api/tree/dev/python/examples#loading-plugins).
 
 Then:
+
 - Restart if required.
 - Fill in config when prompted.
 - Load your binary, wait for analysis to finish
