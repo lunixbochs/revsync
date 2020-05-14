@@ -32,14 +32,14 @@ class State:
         self.comments = Comments()
         self.fhash = get_fhash(bv.file.filename)
         self.running = True
-        self.cmt_changes = {} 
+        self.cmt_changes = {}
         self.cmt_lock = Lock()
-        self.stackvar_changes = {} 
+        self.stackvar_changes = {}
         self.stackvar_lock = Lock()
         self.data_syms = get_syms(bv, SymbolType.DataSymbol)
         self.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
         self.syms_lock = Lock()
-        self.structs = get_structs(bv) 
+        self.structs = get_structs(bv)
         self.structs_lock = Lock()
 
     def close(self):
@@ -395,7 +395,7 @@ def watch_structs(bv):
                     # struct renamed, publish
                     log_info('revsync: user renamed struct %s' % struct_name)
                     publish(bv, {'cmd': 'struc_renamed', 'old_name': str(last_name), 'new_name': str(struct_name)})
-                
+
                 # check for member differences
                 members = member_dict_from_list(struct.typedef.members)
                 last_members = member_dict_from_list(last_struct.typedef.members)
@@ -631,8 +631,8 @@ def toggle_track(bv):
     else:
         log_info("Tracking Disabled")
 
-PluginCommand.register('Coverage: Toggle Tracking', 'Toggle Tracking', toggle_track)
-PluginCommand.register('Coverage: Toggle Visits (RED)', 'Toggle Red', toggle_visits)
-PluginCommand.register('Coverage: Toggle Time (BLUE)', 'Toggle Blue', toggle_time)
-PluginCommand.register('Coverage: Toggle Visitors (GREEN)', 'Toggle Green', toggle_visitors)
-PluginCommand.register('revsync: load', 'load revsync!!!', revsync_load)
+PluginCommand.register('revsync\\Coverage: Toggle Tracking', 'Toggle Tracking', toggle_track)
+PluginCommand.register('revsync\\Coverage: Toggle Visits (RED)', 'Toggle Red', toggle_visits)
+PluginCommand.register('revsync\\Coverage: Toggle Time (BLUE)', 'Toggle Blue', toggle_time)
+PluginCommand.register('revsync\\Coverage: Toggle Visitors (GREEN)', 'Toggle Green', toggle_visitors)
+PluginCommand.register('revsync\\revsync: load', 'load revsync!!!', revsync_load)
