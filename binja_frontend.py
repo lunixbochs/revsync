@@ -635,4 +635,4 @@ PluginCommand.register('revsync\\Coverage: Toggle Tracking', 'Toggle Tracking', 
 PluginCommand.register('revsync\\Coverage: Toggle Visits (RED)', 'Toggle Red', toggle_visits)
 PluginCommand.register('revsync\\Coverage: Toggle Time (BLUE)', 'Toggle Blue', toggle_time)
 PluginCommand.register('revsync\\Coverage: Toggle Visitors (GREEN)', 'Toggle Green', toggle_visitors)
-PluginCommand.register('revsync\\revsync: load', 'load revsync!!!', revsync_load)
+PluginCommand.register('revsync\\Load', 'load revsync!!!', revsync_load)
