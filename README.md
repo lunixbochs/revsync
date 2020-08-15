@@ -1,7 +1,7 @@
 revsync
 =======
 
-Realtime IDA Pro and Binary Ninja sync plugin
+Realtime sync plugin for IDA Pro, Binary Ninja and Vivisect
 
 Syncs:
 
@@ -48,4 +48,18 @@ Then:
 - Fill in config when prompted.
 - Load your binary, wait for analysis to finish
 - Use the Tools Menu, Right-Click or command-palette (CMD/CTL-P) to trigger revsync/Load
+-Done!
+
+
+Vivisect Installation
+---------------------
+
+- Clone to [a plugin folder in your VIV_EXT_PATH (or ~/.viv/plugins/)](https://github.com/vivisect/vivisect/#extending-vivisect--vdb).
+
+Then:
+
+- Restart Vivisect
+- Fill in config when prompted.
+- Load your binary, wait for analysis to finish
+- Use the Plugins -> revsync -> Load option to trigger revsync/Load
 -Done!
