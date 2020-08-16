@@ -39,8 +39,8 @@ class State:
         self.structs = {}   # get_structs(vw) 
         self.structs_lock = Lock()
 
-        self.filedata_by_sha = {}   # FIXME: since we can have multiple files in a workspace, get fhashs based on file
-        self.filedata_by_fname = {}   # FIXME: since we can have multiple files in a workspace, get fhashs based on file
+        self.filedata_by_sha = {}
+        self.filedata_by_fname = {}
         for fname in vw.getFiles():
             sha256 = vw.getFileMeta(fname, 'sha256')
             mdict = dict(vw.getFileMetaDict(fname))
@@ -75,12 +75,6 @@ IDLE_ASK = 250
 COLOUR_PERIOD = 20
 BB_REPORT = 50
 
-'''
-# this has to be done at load time, since vivisect doesn't expect to maintain the file
-def get_fhash(fname):
-    with open(fname, 'rb') as f:
-        return hashlib.sha256(f.read()).hexdigest().upper()
-'''
 
 def get_can_addr(vw, addr):
     fname = vw.getFileByVa(addr)
@@ -616,6 +610,7 @@ def revsync_callback(vw):
         onmsg(vw, key, data, replay)
     return callback
 
+'''
 def revsync_comment(vw, addr):
     comment = interaction.get_text_line_input('Enter comment: ', 'revsync comment')
     publish(vw, {'cmd': 'comment', 'addr': get_can_addr(vw, addr), 'text': comment or ''}, send_uuid=False)
@@ -625,6 +620,7 @@ def revsync_rename(vw, addr):
     name = interaction.get_text_line_input('Enter symbol name: ', 'revsync rename')
     publish(vw, {'cmd': 'rename', 'addr': get_can_addr(vw, addr), 'text': name})
     rename_symbol(vw, addr, name)
+'''
 
 ### handle local events and hand up to REDIS
 import vivisect.base as viv_base
@@ -639,6 +635,7 @@ class VivEventClient(viv_base.VivEventCore):
 
     def VWE_SETNAME(self, vw, event, loc):
         print vw, event, loc
+        publish(vw, {'cmd': 'rename', 'addr': get_can_addr(vw, addr), 'text': name})
 
     def VWE_SETFUNCARGS(self, vw, event, loc):
         print vw, event, loc
@@ -750,6 +747,8 @@ def toggle_track(bv):
     else:
         vw.vprint("Tracking Disabled")
 
+
+######### register the plugin #########
 import sys
 try:
     from PyQt5 import QtGui,QtCore
