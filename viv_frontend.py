@@ -45,6 +45,8 @@ class State:
             sha256 = vw.getFileMeta(fname, 'sha256')
             mdict = dict(vw.getFileMetaDict(fname))
             mdict['name'] = fname
+            mdict['maps'] = [mmap for mmap in vw.getMemoryMaps() if mmap[MAP_FNAME] == fname]
+            mdict['sha256'] = sha256
             self.filedata_by_sha[sha256] = mdict
             self.filedata_by_fname[fname] = mdict
 
@@ -60,6 +62,14 @@ class State:
 
     def getMetaByFname(self, key):
         return self.filedata_by_fname.get(key)
+
+    def getHashByAddr(self, addr):
+        for mdict in self.filedata_by_fname.values():
+            for mmap in mdict.get('maps'):
+                mva, msz, mperm, mfname = mmap
+                if addr >= mva and addr < mva+msz:
+                    fhash = mdict.get('sha256')
+                    return fhash, mfname
 
     def genFhashes(self):
         for fdict in self.filedata_by_sha.values():
@@ -610,32 +620,44 @@ def revsync_callback(vw):
         onmsg(vw, key, data, replay)
     return callback
 
-'''
-def revsync_comment(vw, addr):
-    comment = interaction.get_text_line_input('Enter comment: ', 'revsync comment')
-    publish(vw, {'cmd': 'comment', 'addr': get_can_addr(vw, addr), 'text': comment or ''}, send_uuid=False)
-    get_func_by_addr(vw, addr).set_comment(addr, comment)
-
-def revsync_rename(vw, addr):
-    name = interaction.get_text_line_input('Enter symbol name: ', 'revsync rename')
-    publish(vw, {'cmd': 'rename', 'addr': get_can_addr(vw, addr), 'text': name})
-    rename_symbol(vw, addr, name)
-'''
 
 ### handle local events and hand up to REDIS
 import vivisect.base as viv_base
 class VivEventClient(viv_base.VivEventCore):
+    def __init__(self, vw):
+        viv_base.VivEventCore.__init__(self, vw)
+        self.mythread = self._ve_fireListener()
+        self.state = vw.getMeta('revsync')
+
     # make sure all VA's are reduced to base-addr-offsets
-    def VWE_COMMENT(self, vw, event, loc):
-        print vw, event, loc
+    def VWE_COMMENT(self, vw, event, locinfo):
+        print vw, event, locinfo
+        cmt_addr, cmt = locinfo
         # make sure something has changed (and that we're not repeating what we just received from revsync
         # publish comment to revsync
-        #fname, fhash, offset = self.getFileContext(vw, loc[L_VA])
-        publish(vw, {'cmd': 'comment', 'addr': get_can_addr(vw, addr), 'text': comment or ''}, send_uuid=False)
+        last_cmt = self.state.cmt_changes.get(cmt_addr)
+        if last_cmt is None or last_cmt != cmt:
+            # new/changed comment, publish
+            try:
+                fhash, fname = self.state.getHashByAddr(cmt_addr)
+                addr = get_can_addr(vw, cmt_addr)
+                changed = self.state.comments.parse_comment_update(addr, client.nick, cmt)
+                vw.vprint('revsync: user changed comment: %#x, %s' % (addr, changed))
+                publish(vw, {'cmd': 'comment', 'addr': addr, 'text': changed}, fhash)
+                self.state.cmt_changes[cmt_addr] = changed
+            except NoChange:
+                pass
 
-    def VWE_SETNAME(self, vw, event, loc):
-        print vw, event, loc
-        publish(vw, {'cmd': 'rename', 'addr': get_can_addr(vw, addr), 'text': name})
+    def VWE_SETNAME(self, vw, event, locinfo):
+        print vw, event, locinfo
+        name_addr, name = locinfo
+        addr = get_can_addr(vw, name_addr)
+        if self.state.syms.get(addr) != name:
+            # name changed, publish
+            fhash, fname = self.state.getHashByAddr(name_addr)
+            vw.vprint('revsync: user renamed symbol at %#x: %s' % (addr, name))
+            publish(vw, {'cmd': 'rename', 'addr': addr, 'text': name}, fhash)
+            self.state.syms[addr] = name
 
     def VWE_SETFUNCARGS(self, vw, event, loc):
         print vw, event, loc
@@ -660,6 +682,9 @@ class VivEventClient(viv_base.VivEventCore):
         print vw, event, loc
 
     def VWE_SETMETA(self, vw, event, loc):
+        print vw, event, loc
+
+    def VWE_ADDFILE(self, vw, event, loc):
         print vw, event, loc
 
     def VWE_ADDFUNCTION(self, vw, event, loc):
