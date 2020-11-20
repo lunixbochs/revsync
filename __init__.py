@@ -46,6 +46,31 @@ try:
 except ImportError:
     pass
 
+try:
+    import vivisect
+    try:
+        import config
+    except ImportError:
+        host_f = bi.TextLineField("host")
+        port_f = bi.IntegerField("port")
+        nick_f = bi.TextLineField("nick")
+        password_f = bi.TextLineField("password")
+        success = bi.get_form_input([None, host_f, port_f, nick_f, password_f], "Configure Revsync")
+        if not success:
+            binaryninja.interaction.show_message_box(title="Revsync error", text="Failed to configure revsync")
+            raise
+
+        write_config(host_f.result, port_f.result, nick_f.result, password_f.result)
+        import config
+    import viv_frontend
+    good = True
+except ImportError:
+    pass
+
 if not good:
-    print('Warning: both IDA and Binary Ninja plugin API imports failed')
+    print('Warning: IDA, Binary Ninja, and Vivisect plugin API imports failed')
     raise ImportError
+
+def vivExtension(vw, vwgui):
+    import viv_frontend
+    viv_frontend.vivExtension(vw, vwgui)

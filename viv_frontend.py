@@ -709,6 +709,7 @@ evtdist = None
 
 def revsync_load(vw):
     global client, evtdist
+    vw.vprint('Connecting to RevSync Server')
 
     ### hook into the viv event stream
 
@@ -786,11 +787,11 @@ from vqt.common import *
 
 @idlethread
 def vivExtension(vw, vwgui):
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Tracking', ACT(toggle_track))
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Visits (RED)', ACT(toggle_visits))
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Time (BLUE)', ACT(toggle_time))
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Visitors (GREEN)', ACT(toggle_visitors))
-    vwgui.vqAddMenuField('&Tools.&revsync.&load', 'load revsync!!!', ACT(revsync_load))
+    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Tracking', toggle_track, args=(vw,))
+    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Visits (RED)', toggle_visits, args=(vw,))
+    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Time (BLUE)', toggle_time, args=(vw,))
+    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Visitors (GREEN)', toggle_visitors, args=(vw,))
+    vwgui.vqAddMenuField('&Tools.&revsync.&load: Load revsync for binary(s) in this workspace', revsync_load, args=(vw,))
 
 def register(vw, vwgui):
     import vqt.main as vq_main
