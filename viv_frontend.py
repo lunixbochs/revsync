@@ -76,7 +76,7 @@ class State:
             try:
                 yield fdict['sha256']
             except KeyError:
-                print "keyerror: no 'sha256' key in metadict: %r" % fdict
+                print("keyerror: no 'sha256' key in metadict: %r" % fdict)
 
 MIN_COLOR = 0
 MAX_COLOR = 200
@@ -421,7 +421,7 @@ def do_analysis_and_wait(vw):
 
 ### handle remote events:
 def onmsg(vw, key, data, replay):
-    print "onmsg: %r : %r  (%r)" % (key, data, replay)
+    print("onmsg: %r : %r  (%r)" % (key, data, replay))
     try:
         state = State.get(vw)
         meta = state.getMetaBySha(key)
@@ -631,7 +631,7 @@ class VivEventClient(viv_base.VivEventCore):
 
     # make sure all VA's are reduced to base-addr-offsets
     def VWE_COMMENT(self, vw, event, locinfo):
-        print vw, event, locinfo
+        print("%r  %r  %r" % (vw, event, locinfo))
         cmt_addr, cmt = locinfo
         # make sure something has changed (and that we're not repeating what we just received from revsync
         # publish comment to revsync
@@ -649,7 +649,7 @@ class VivEventClient(viv_base.VivEventCore):
                 pass
 
     def VWE_SETNAME(self, vw, event, locinfo):
-        print vw, event, locinfo
+        print("%r  %r  %r" % (vw, event, locinfo))
         name_addr, name = locinfo
         addr = get_can_addr(vw, name_addr)
         if self.state.syms.get(addr) != name:
@@ -660,10 +660,10 @@ class VivEventClient(viv_base.VivEventCore):
             self.state.syms[addr] = name
 
     def VWE_SETFUNCARGS(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_SETFUNCMETA(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
 
     def VWE_ADDLOCATION(self, vw, event, loc):
@@ -676,31 +676,31 @@ class VivEventClient(viv_base.VivEventCore):
         # * LOC_OP
         if loc[L_LTYPE] is LOC_OP:
             return
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_DELLOCATION(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_SETMETA(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_ADDFILE(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_ADDFUNCTION(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_DELFUNCTION(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_ADDCOLOR(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_DELCOLOR(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_CHAT(self, vw, event, loc):
-        print vw, event, loc
+        print("%r  %r  %r" % (vw, event, locinfo))
 
 
 client = None
