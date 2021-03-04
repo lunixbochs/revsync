@@ -82,7 +82,7 @@ def onmsg(key, data, replay=False):
             print('revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text']))
         elif cmd == 'rename':
             print('revsync: <%s> %s %#x %s' % (user, cmd, ea, data['text']))
-            set_name(ea, str(data['text']))
+            set_name(ea, str(data['text']).replace(' ', '_'))
         elif cmd == 'join':
             print('revsync: <%s> joined' % (user))
         elif cmd in ['stackvar_renamed', 'struc_created', 'struc_deleted',

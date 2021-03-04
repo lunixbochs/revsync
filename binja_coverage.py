@@ -4,7 +4,6 @@ from binaryninja.plugin import PluginCommand
 import logging
 import random
 
-logging.disable(logging.WARNING)
 COVERAGE_FIRST_LOAD = True
 SHOW_VISITS = True
 SHOW_LENGTH = True
