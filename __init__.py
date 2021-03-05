@@ -43,24 +43,24 @@ except ImportError:
 
 # check if running in Vivisect:
 if globals().get('vw') is not None:
-    print("vivisect startup...")
     try:
         import vivisect
         try:
             import config
         except ImportError:
-            #host_f = bi.TextLineField("host")
-            #port_f = bi.IntegerField("port")
-            #nick_f = bi.TextLineField("nick")
-            #password_f = bi.TextLineField("password")
-            #success = bi.get_form_input([None, host_f, port_f, nick_f, password_f], "Configure Revsync")
-            #if not success:
-            #    binaryninja.interaction.show_message_box(title="Revsync error", text="Failed to configure revsync")
-            #    raise
+            import vqt.common as vcmn
+            dynd = vcmn.DynamicDialog('RevSync Config')
+            dynd.addTextField("host")
+            dynd.addIntHexField("port", dflt=6379)
+            dynd.addTextField("nick")
+            dynd.addTextField("password")
+            res = dynd.prompt()
+            if not len(res):
+                vcmn.warning("Revsync error", "Failed to configure revsync")
+                raise
 
-            #write_config(host_f.result, port_f.result, nick_f.result, password_f.result)
-            #import config
-            print("import error importing config (revsync)") 
+            write_config(res.get('host'), res.get('port'), res.get('nick'), res.get('password'))
+            import config
 
         import viv_frontend
         good = True
@@ -84,3 +84,4 @@ if not good:
 def vivExtension(vw, vwgui):
     import viv_frontend
     viv_frontend.vivExtension(vw, vwgui)
+
