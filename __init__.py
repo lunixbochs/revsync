@@ -45,25 +45,26 @@ except ImportError:
 if globals().get('vw') is not None:
     try:
         import vivisect
-        try:
-            import config
-        except ImportError:
-            import vqt.common as vcmn
-            dynd = vcmn.DynamicDialog('RevSync Config')
-            dynd.addTextField("host")
-            dynd.addIntHexField("port", dflt=6379)
-            dynd.addTextField("nick")
-            dynd.addTextField("password")
-            res = dynd.prompt()
-            if not len(res):
-                vcmn.warning("Revsync error", "Failed to configure revsync")
-                raise
+        if vw.getVivGui():
+            try:
+                import config
+            except ImportError:
+                import vqt.common as vcmn
+                dynd = vcmn.DynamicDialog('RevSync Config')
+                dynd.addTextField("host")
+                dynd.addIntHexField("port", dflt=6379)
+                dynd.addTextField("nick")
+                dynd.addTextField("password")
+                res = dynd.prompt()
+                if not len(res):
+                    vcmn.warning("Revsync error", "Failed to configure revsync")
+                    raise
 
-            write_config(res.get('host'), res.get('port'), res.get('nick'), res.get('password'))
-            import config
+                write_config(res.get('host'), res.get('port'), res.get('nick'), res.get('password'))
+                import config
 
-        import viv_frontend
-        good = True
+            import viv_frontend
+            good = True
     except ImportError:
         pass
 
