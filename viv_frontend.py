@@ -355,6 +355,7 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
+        
         elif cmd == 'struc_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             '''  not ready to wrap this into Viv yet.
@@ -369,6 +370,7 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
+        
         elif cmd == 'struc_renamed':
             old_struct_name = data['old_name'].encode('ascii', 'ignore')
             new_struct_name = data['new_name'].encode('ascii', 'ignore')
@@ -384,6 +386,7 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s %s' % (user, cmd, old_struct_name, new_struct_name))
+        
         elif cmd == 'struc_member_created':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             '''  not ready to wrap this into Viv yet.
@@ -406,6 +409,7 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
+        
         elif cmd == 'struc_member_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             member_name = '???'
@@ -431,6 +435,7 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
+            
         elif cmd == 'struc_member_renamed':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             member_name = data['member_name'].encode('ascii', 'ignore')
@@ -453,6 +458,7 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
+
         elif cmd == 'struc_member_changed':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             '''  not ready to wrap this into Viv yet.
@@ -474,12 +480,15 @@ def onmsg(vw, key, data, replay):
             state.structs_lock.release()
             '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, m.name))
+
         elif cmd == 'join':
             vw.vprint('revsync: <%s> joined' % (user))
+
         elif cmd == 'coverage':
             vw.vprint("Updating Global Coverage")
             state.cov.update(json.loads(data['blocks']))
             state.color_now = True
+
         else:
             vw.vprint('revsync: unknown cmd %s' % data)
 
@@ -550,7 +559,8 @@ class VivEventClient(viv_base.VivEventCore):
         vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_DELLOCATION(self, vw, event, loc):
-        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
+        #vw.vprint("%r  %r  %r" % (vw, event, locinfo))
+        pass
 
     def VWE_SETMETA(self, vw, event, loc):
         vw.vprint("%r  %r  %r" % (vw, event, locinfo))
@@ -574,7 +584,8 @@ class VivEventClient(viv_base.VivEventCore):
         vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_CHAT(self, vw, event, loc):
-        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
+        #vw.vprint("%r  %r  %r" % (vw, event, locinfo))
+        pass
 
 
 client = None
