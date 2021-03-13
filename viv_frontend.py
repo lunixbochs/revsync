@@ -76,7 +76,7 @@ class State:
             try:
                 yield fdict['sha256']
             except KeyError:
-                print("keyerror: no 'sha256' key in metadict: %r" % fdict)
+                vw.vprint("keyerror: no 'sha256' key in metadict: %r" % fdict)
 
 MIN_COLOR = 0
 MAX_COLOR = 200
@@ -531,10 +531,10 @@ class VivEventClient(viv_base.VivEventCore):
             self.state.syms[addr] = name
 
     def VWE_SETFUNCARGS(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_SETFUNCMETA(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
 
     def VWE_ADDLOCATION(self, vw, event, loc):
@@ -547,34 +547,34 @@ class VivEventClient(viv_base.VivEventCore):
         # * LOC_OP
         if loc[L_LTYPE] is LOC_OP:
             return
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_DELLOCATION(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_SETMETA(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_ADDFILE(self, vw, event, loc):
-        #print("%r  %r  %r" % (vw, event, locinfo))
+        #vw.vprint("%r  %r  %r" % (vw, event, locinfo))
         pass
 
     def VWE_ADDFUNCTION(self, vw, event, loc):
-        #print("%r  %r  %r" % (vw, event, locinfo))
+        #vw.vprint("%r  %r  %r" % (vw, event, locinfo))
         pass
 
     def VWE_DELFUNCTION(self, vw, event, loc):
-        #print("%r  %r  %r" % (vw, event, locinfo))
+        #vw.vprint("%r  %r  %r" % (vw, event, locinfo))
         pass
 
     def VWE_ADDCOLOR(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_DELCOLOR(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_CHAT(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        vw.vprint("%r  %r  %r" % (vw, event, locinfo))
 
 
 client = None
