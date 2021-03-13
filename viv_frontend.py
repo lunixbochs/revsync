@@ -86,7 +86,10 @@ COLOUR_PERIOD = 20
 BB_REPORT = 50
 
 
-def get_can_addr(vw, addr):
+def get_can_addr(vw, addr):     #done
+    '''
+    normalizing addresses
+    '''
     fname = vw.getFileByVa(addr)
     if fname is None:
         raise Exception("ARRG! get_can_addr(0x%x)" % addr)
@@ -94,7 +97,10 @@ def get_can_addr(vw, addr):
     imagebase = vw.getFileMeta(fname, 'imagebase')
     return addr - imagebase
 
-def get_ea(vw, sha_key, addr):
+def get_ea(vw, sha_key, addr):      #done
+    '''
+    normalizing addresses
+    '''
     imagebase = None
     for fname in vw.getFiles():
         fmeta = vw.getFileMetaDict(fname)
@@ -104,48 +110,86 @@ def get_ea(vw, sha_key, addr):
 
     return addr + imagebase
 
-def get_func_by_addr(vw, addr):
+def get_func_by_addr(vw, addr):     #done
     return vw.getFunction(addr)
 
-def get_bb_by_addr(bv, addr):
-    return vw.getCodeBlock(addr)
+def get_bb_by_addr(vw, addr):
+    return vw.getCodeBlock(addr)        #done
 
-# in order to map IDA type sizes <-> binja types,
+# in order to map IDA type sizes <-> viv types,
 # take the 'size' field and attempt to divine some
-# kind of type in binja that's close as possible.
+# kind of type in viv that's close as possible.
 # right now, that means try to use uint8_t ... uint64_t,
 # anything bigger just make an array
-def get_type_by_size(bv, size):
+def get_type_by_size(vw, size):
     typedef = None
     if size <= 8:
         try:
-            typedef, name = bv.parse_type_string('uint{}_t'.format(8*size))
+            typedef, name = vw.parse_type_string('uint{}_t'.format(8*size))
         except SyntaxError:
             pass
     else:
         try:
-            typedef, name = bv.parse_type_string('char a[{}]'.format(8*size))
+            typedef, name = vw.parse_type_string('char a[{}]'.format(8*size))
         except SyntaxError:
             pass
     return typedef
 
-def get_structs(bv):
-    d = dict()
-    for name, typedef in bv.types.items():
-        if typedef.structure:
-            typeid = bv.get_type_id(name)
-            struct = Struct(name, typedef.structure)
-            d[typeid] = struct
-    return d
-
-def get_syms(vw):
+def get_syms(vw):   #done
     syms = dict(vw.name_by_va)
     return syms
 
 def stack_dict_from_list(stackvars):
     d = {}
-    for var in stackvars:
-        d[var.storage] = (var.name, var.type)
+    for fva, offset, unknown, (vartype, varname) in stackvars:
+        d[offset] = (varname, vartype)
+    return d
+
+def rename_symbol(vw, addr, name):  # done
+    vw.makeName(addr, name)
+
+def rename_stackvar(vw, func_addr, offset, name):   # TESTME
+    func = vw.getFunction(func_addr)
+    if func is None:
+        vw.vprint('revsync: bad func addr %#x during rename_stackvar' % func_addr)
+        return
+
+    # we need to figure out the variable type before renaming
+    stackvars = stack_dict_from_list(vw.getFunctionLocals(func_addr))
+    var = stackvars.get(offset)
+    if var is None:
+        vw.vprint('revsync: could not locate stack var with offset %#x during rename_stackvar' % offset)
+        return
+    var_name, var_type = var
+    # CHECKME: does this set function args too?  do i need to split them?
+    vw.setFunctionLocal(func_addr, offset, var_type, name)
+    #aidx = offset // vw.getPointerSize()
+    #vw.setFunctionArg(func_addr, aidx, var_type, name)
+    return
+
+def publish(vw, data, fhash, **kwargs):
+    state = State.get(vw)
+    if state:
+        client.publish(fhash, data, **kwargs)
+
+def analyze(vw):   #done
+    vw.vprint('revsync: running analysis update...')
+    vw.analyze()
+    vw.vprint('revsync: analysis finished.')
+    return
+
+
+
+
+
+##### structs are not currently supported
+def get_structs(vw):
+    d = dict()
+    for name, typedef in vw.types.items():
+        if typedef.structure:
+            typeid = vw.get_type_id(name)
+            struct = Struct(name, typedef.structure)
+            d[typeid] = struct
     return d
 
 def member_dict_from_list(members):
@@ -154,79 +198,15 @@ def member_dict_from_list(members):
         d[member.name] = member
     return d
 
-def rename_symbol(vw, addr, name):
-    vw.makeName(addr, name)
-    '''
-    sym = bv.get_symbol_at(addr)
-    if sym is not None:
-        # symbol already exists for this address
-        if sym.auto is True:
-            bv.undefine_auto_symbol(sym)
-        else:
-            bv.undefine_user_symbol(sym)
-    # is it a function?
-    func = get_func_by_addr(bv, addr)
-    if func is not None:
-        # function
-        sym = types.Symbol(SymbolType.FunctionSymbol, addr, name)
-    else:
-        # data
-        sym = types.Symbol(SymbolType.DataSymbol, addr, name)
-    bv.define_user_symbol(sym)
-    '''
 
-def rename_stackvar(bv, func_addr, offset, name):
-    func = get_func_by_addr(bv, func_addr)
-    if func is None:
-        vw.vprint('revsync: bad func addr %#x during rename_stackvar' % func_addr)
-        return
-    # we need to figure out the variable type before renaming
-    stackvars = stack_dict_from_list(func.vars)
-    var = stackvars.get(offset)
-    if var is None:
-        vw.vprint('revsync: could not locate stack var with offset %#x during rename_stackvar' % offset)
-        return
-    var_name, var_type = var
-    func.create_user_stack_var(offset, var_type, name)
-    return
-
-def publish(vw, data, fhash, **kwargs):
-    state = State.get(vw)
-    if state:
-        client.publish(fhash, data, **kwargs)
-
-def push_cv(vw, data, **kwargs):
-    state = State.get(vw)
-    if state:
-        client.push("%s_COVERAGE" % state.fhash, data, **kwargs)
-
-def map_color(x):
-    n = x
-    if x == 0: return 0
-    # x = min(max(0, (x ** 2) / (2 * (x ** 2 - x) + 1)), 1)
-    # if x == 0: return 0
-    return int(math.ceil((MAX_COLOR - MIN_COLOR) * x + MIN_COLOR))
-
-def convert_color(color):
-    r, g, b = [map_color(x) for x in color]
-    return highlight.HighlightColor(red=r, green=g, blue=b)
-
-def colour_coverage(bv, cur_func):
-    state = State.get(bv)
-    for bb in cur_func.basic_blocks:
-        color = state.cov.color(get_can_addr(bv, bb.start), visits=state.show_visits, time=state.show_time, users=state.show_visitors)
-        if color:
-            bb.set_user_highlight(convert_color(color))
-        else:
-            bb.set_user_highlight(highlight.HighlightColor(red=74, blue=74, green=74))
-
-def watch_structs(bv):
+#### again, no struct just yet
+def watch_structs(vw):
     """ Check structs for changes and publish diffs"""
-    state = State.get(bv)
+    state = State.get(vw)
 
     while state.running:
         state.structs_lock.acquire()
-        structs = get_structs(bv)
+        structs = get_structs(vw)
         if structs != state.structs:
             for struct_id, struct in structs.items():
                 last_struct = state.structs.get(struct_id)
@@ -281,143 +261,34 @@ def watch_structs(bv):
         state.structs_lock.release()
         time.sleep(0.5)
 
+###### Coverage not yet implemented
+def push_cv(vw, data, **kwargs):
+    state = State.get(vw)
+    if state:
+        client.push("%s_COVERAGE" % state.fhash, data, **kwargs)
 
+def map_color(x):
+    n = x
+    if x == 0: return 0
+    # x = min(max(0, (x ** 2) / (2 * (x ** 2 - x) + 1)), 1)
+    # if x == 0: return 0
+    return int(math.ceil((MAX_COLOR - MIN_COLOR) * x + MIN_COLOR))
 
-'''
-################################################################ unused
-def watch_syms(bv, sym_type):
-    """ Watch symbols of a given type (e.g. DataSymbol) for changes and publish diffs """
+def convert_color(color):
+    r, g, b = [map_color(x) for x in color]
+    return highlight.HighlightColor(red=r, green=g, blue=b)
+
+def colour_coverage(bv, cur_func):
     state = State.get(bv)
-
-    while state.running:
-        state.syms_lock.acquire()
-        # DataSymbol
-        data_syms = get_syms(bv, SymbolType.DataSymbol)
-        if data_syms != state.data_syms:
-            for addr, name in data_syms.items():
-                if state.data_syms.get(addr) != name:
-                    # name changed, publish
-                    vw.vprint('revsync: user renamed symbol at %#x: %s' % (addr, name))
-                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
-
-        # FunctionSymbol
-        func_syms = get_syms(bv, SymbolType.FunctionSymbol)
-        if func_syms != state.func_syms:
-            for addr, name in func_syms.items():
-                if state.func_syms.get(addr) != name:
-                    # name changed, publish
-                    vw.vprint('revsync: user renamed symbol at %#x: %s' % (addr, name))
-                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
-
-        state.data_syms = get_syms(bv, SymbolType.DataSymbol)
-        state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
-        state.syms_lock.release()
-        time.sleep(0.5)
-
-def watch_cur_func(bv):
-    """ Watch current function (if we're in code) for comment changes and publish diffs """
-    def get_cur_func():
-        return get_func_by_addr(bv, bv.offset)
-
-    def get_cur_bb():
-        return get_bb_by_addr(bv, bv.offset)
-
-    state = State.get(bv)
-    last_func = get_cur_func()
-    last_bb = get_cur_bb()
-    last_time = time.time()
-    last_bb_report = time.time()
-    last_bb_addr = None
-    last_addr = None
-    while state.running:
-        now = time.time()
-        if state.track_coverage and now - last_bb_report >= BB_REPORT:
-            last_bb_report = now
-            push_cv(bv, {'b': state.cov.flush()})
-
-        if last_addr == bv.offset:
-            time.sleep(0.25)
-            continue
+    for bb in cur_func.basic_blocks:
+        color = state.cov.color(get_can_addr(bv, bb.start), visits=state.show_visits, time=state.show_time, users=state.show_visitors)
+        if color:
+            bb.set_user_highlight(convert_color(color))
         else:
-            # were we just in a function?
-            if last_func:
-                state.cmt_lock.acquire()
-                comments = last_func.comments
-                # check for changed comments
-                for cmt_addr, cmt in comments.items():
-                    last_cmt = state.cmt_changes.get(cmt_addr)
-                    if last_cmt == None or last_cmt != cmt:
-                        # new/changed comment, publish
-                        try:
-                            addr = get_can_addr(bv, cmt_addr)
-                            changed = state.comments.parse_comment_update(addr, client.nick, cmt)
-                            vw.vprint('revsync: user changed comment: %#x, %s' % (addr, changed))
-                            publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
-                            state.cmt_changes[cmt_addr] = changed
-                        except NoChange:
-                            pass
-                        continue
+            bb.set_user_highlight(highlight.HighlightColor(red=74, blue=74, green=74))
 
-                # TODO: this needs to be fixed later
-                """
-                # check for removed comments
-                if last_comments:
-                    removed = set(last_comments.keys()) - set(comments.keys())
-                    for addr in removed:
-                        addr = get_can_addr(bv, addr)
-                        vw.vprint('revsync: user removed comment: %#x' % addr)
-                        publish(bv, {'cmd': 'comment', 'addr': addr, 'text': ''})
-                """
-                state.cmt_lock.release()
 
-                # similar dance, but with stackvars
-                state.stackvar_lock.acquire()
-                stackvars = stack_dict_from_list(last_func.vars)
-                for offset, data in stackvars.items():
-                    # stack variables are more difficult than comments to keep state on, since they
-                    # exist from the beginning, and have a type.  track each one.  start by tracking the first
-                    # time we see it.  if there are changes after that, publish.
-                    stackvar_name, stackvar_type = data
-                    stackvar_val = state.stackvar_changes.get((last_func.start,offset))
-                    if stackvar_val == None:
-                        # never seen before, start tracking
-                        state.stackvar_changes[(last_func.start,offset)] = stackvar_name
-                    elif stackvar_val != stackvar_name:
-                        # stack var name changed, publish
-                        vw.vprint('revsync: user changed stackvar name at offset %#x to %s' % (offset, stackvar_name))
-                        publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': stackvar_name})
-                        state.stackvar_changes[(last_func.start,offset)] = stackvar_name
-                state.stackvar_lock.release()
 
-                if state.track_coverage:
-                    cur_bb = get_cur_bb()
-                    if cur_bb != last_bb:
-                        state.color_now = True
-                        now = time.time()
-                        if last_bb_addr is not None:
-                            state.cov.visit_addr(last_bb_addr, elapsed=now - last_time, visits=1)
-                        last_time = now
-                        if cur_bb is None:
-                            last_bb_addr = None
-                        else:
-                            last_bb_addr = get_can_addr(bv, cur_bb.start)
-
-            # update current function/addr info
-            last_func = get_cur_func()
-            last_bb = get_cur_bb()
-            last_addr = bv.offset
-
-        if state.color_now and last_func != None:
-            colour_coverage(bv, last_func)
-            state.color_now = False
-################################################## ends: unused
-'''
-
-def do_analysis_and_wait(vw):
-    vw.vprint('revsync: running analysis update...')
-    vw.analyze()
-    vw.vprint('revsync: analysis finished.')
-    return
 
 ### handle remote events:
 def onmsg(vw, key, data, replay):
@@ -615,7 +486,7 @@ def onmsg(vw, key, data, replay):
     except Exception as e:
         vw.vprint('onmsg error: %r' % e)
 
-def revsync_callback(vw):
+def revsync_callback(vw):   #done
     def callback(key, data, replay=False):
         onmsg(vw, key, data, replay)
     return callback
@@ -630,7 +501,7 @@ class VivEventClient(viv_base.VivEventCore):
         self.state = vw.getMeta('revsync')
 
     # make sure all VA's are reduced to base-addr-offsets
-    def VWE_COMMENT(self, vw, event, locinfo):
+    def VWE_COMMENT(self, vw, event, locinfo):  #done
         print("%r  %r  %r" % (vw, event, locinfo))
         cmt_addr, cmt = locinfo
         # make sure something has changed (and that we're not repeating what we just received from revsync
@@ -648,7 +519,7 @@ class VivEventClient(viv_base.VivEventCore):
             except NoChange:
                 pass
 
-    def VWE_SETNAME(self, vw, event, locinfo):
+    def VWE_SETNAME(self, vw, event, locinfo):  #done
         print("%r  %r  %r" % (vw, event, locinfo))
         name_addr, name = locinfo
         addr = get_can_addr(vw, name_addr)
@@ -685,13 +556,16 @@ class VivEventClient(viv_base.VivEventCore):
         print("%r  %r  %r" % (vw, event, locinfo))
 
     def VWE_ADDFILE(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        #print("%r  %r  %r" % (vw, event, locinfo))
+        pass
 
     def VWE_ADDFUNCTION(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        #print("%r  %r  %r" % (vw, event, locinfo))
+        pass
 
     def VWE_DELFUNCTION(self, vw, event, loc):
-        print("%r  %r  %r" % (vw, event, locinfo))
+        #print("%r  %r  %r" % (vw, event, locinfo))
+        pass
 
     def VWE_ADDCOLOR(self, vw, event, loc):
         print("%r  %r  %r" % (vw, event, locinfo))
@@ -707,22 +581,22 @@ client = None
 evtdist = None
 
 
-def revsync_load(vw):
+def revsync_load(vw):   #done
     global client, evtdist
     vw.vprint('Connecting to RevSync Server')
 
     ### hook into the viv event stream
 
     # lets ensure auto-analysis is finished by forcing another analysis
-    t0 = threading.Thread(target=do_analysis_and_wait, args=(vw,))
-    t0.start()
-    t0.join()
+    analyze(vw)
 
     if client is None:
+        vw.vprint("creating a new revsync connection")
         client = Client(**config)
 
     state = vw.metadata.get('revsync')
     if state:
+        vw.vprint("closing existing revsync state")
         state.close()
 
     vw.vprint('revsync: working...')
@@ -738,8 +612,8 @@ def revsync_load(vw):
         evtdist = VivEventClient(vw)
 
 
-def toggle_visits(bv):
-    state = State.get(bv)
+def toggle_visits(vw):  #done
+    state = State.get(vw)
     state.show_visits = not state.show_visits
     if state.show_visits:
         vw.vprint("Visit Visualization Enabled (Red)")
@@ -747,8 +621,8 @@ def toggle_visits(bv):
         vw.vprint("Visit Visualization Disabled (Red)")
     state.color_now = True
 
-def toggle_time(bv):
-    state = State.get(bv)
+def toggle_time(vw):    #done
+    state = State.get(vw)
     state.show_time = not state.show_time
     if state.show_time:
         vw.vprint("Time Visualization Enabled (Blue)")
@@ -756,8 +630,8 @@ def toggle_time(bv):
         vw.vprint("Time Visualization Disabled (Blue)")
     state.color_now = True
 
-def toggle_visitors(bv):
-    state = State.get(bv)
+def toggle_visitors(vw):    #done
+    state = State.get(vw)
     state.show_visitors = not state.show_visitors
     if state.show_visitors:
         vw.vprint("Visitor Visualization Enabled (Green)")
@@ -765,8 +639,8 @@ def toggle_visitors(bv):
         vw.vprint("Visitor Visualization Disabled (Green)")
     state.color_now = True
 
-def toggle_track(bv):
-    state = State.get(bv)
+def toggle_track(vw):   #done
+    state = State.get(vw)
     state.track_coverage = not state.track_coverage
     if state.track_coverage:
         vw.vprint("Tracking Enabled")
@@ -775,28 +649,13 @@ def toggle_track(bv):
 
 
 ######### register the plugin #########
-import sys
-try:
-    from PyQt5 import QtGui,QtCore
-except:
-    from PyQt4 import QtGui,QtCore
-
-from vqt.main import idlethread,idlethreadsync
-from vqt.basics import VBox
-from vqt.common import *
+from vqt.main import idlethread
 
 @idlethread
 def vivExtension(vw, vwgui):
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Tracking', toggle_track, args=(vw,))
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Visits (RED)', toggle_visits, args=(vw,))
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Time (BLUE)', toggle_time, args=(vw,))
-    vwgui.vqAddMenuField('&Tools.&revsync.&Coverage: Toggle Visitors (GREEN)', toggle_visitors, args=(vw,))
-    vwgui.vqAddMenuField('&Tools.&revsync.&load: Load revsync for binary(s) in this workspace', revsync_load, args=(vw,))
-
-def register(vw, vwgui):
-    import vqt.main as vq_main
-    vq_main.guiq.append((vivExtension, (), {'vw':vw, 'vwgui':vwgui}, ))
-
-if globals().get('vwgui') is not None:
-    register(vw, vwgui)
+    vwgui.vqAddMenuField('&Plugins.&revsync.&Coverage: Toggle Tracking', toggle_track, args=(vw,))
+    vwgui.vqAddMenuField('&Plugins.&revsync.&Coverage: Toggle Visits (RED)', toggle_visits, args=(vw,))
+    vwgui.vqAddMenuField('&Plugins.&revsync.&Coverage: Toggle Time (BLUE)', toggle_time, args=(vw,))
+    vwgui.vqAddMenuField('&Plugins.&revsync.&Coverage: Toggle Visitors (GREEN)', toggle_visitors, args=(vw,))
+    vwgui.vqAddMenuField('&Plugins.&revsync.&load: Load revsync for binary(s) in this workspace', revsync_load, args=(vw,))
 
