@@ -89,7 +89,7 @@ COLOUR_PERIOD = 20
 BB_REPORT = 50
 
 
-def get_can_addr(vw, addr):     #done
+def get_can_addr(vw, addr):
     '''
     normalizing addresses
     '''
@@ -100,7 +100,7 @@ def get_can_addr(vw, addr):     #done
     imagebase = vw.getFileMeta(fname, 'imagebase')
     return addr - imagebase
 
-def get_ea(vw, sha_key, addr):      #done
+def get_ea(vw, sha_key, addr):
     '''
     normalizing addresses
     '''
@@ -113,11 +113,11 @@ def get_ea(vw, sha_key, addr):      #done
 
     return addr + imagebase
 
-def get_func_by_addr(vw, addr):     #done
+def get_func_by_addr(vw, addr):
     return vw.getFunction(addr)
 
 def get_bb_by_addr(vw, addr):
-    return vw.getCodeBlock(addr)        #done
+    return vw.getCodeBlock(addr)
 
 # in order to map IDA type sizes <-> viv types,
 # take the 'size' field and attempt to divine some
@@ -138,7 +138,7 @@ def get_type_by_size(vw, size):
             pass
     return typedef
 
-def get_syms(vw):   #done
+def get_syms(vw):
     syms = dict(vw.name_by_va)
     return syms
 
@@ -175,7 +175,7 @@ def publish(vw, data, fhash, **kwargs):
     if state:
         client.publish(fhash, data, **kwargs)
 
-def analyze(vw):   #done
+def analyze(vw):
     vw.vprint('revsync: running analysis update...')
     vw.analyze()
     vw.vprint('revsync: analysis finished.')
@@ -295,7 +295,7 @@ def colour_coverage(bv, cur_func):
 
 ### handle remote events:
 def onmsg(vw, key, data, replay):
-    logger.warning("onmsg: %r : %r  (%r)" % (key, data, replay))
+    logger.info("onmsg: %r : %r  (%r)" % (key, data, replay))
     try:
         state = State.get(vw)
         meta = state.getMetaBySha(key)
@@ -389,7 +389,7 @@ def onmsg(vw, key, data, replay):
     except Exception as e:
         vw.vprint('onmsg error: %r' % e)
 
-def revsync_callback(vw):   #done
+def revsync_callback(vw):
     def callback(key, data, replay=False):
         onmsg(vw, key, data, replay)
     return callback
@@ -404,8 +404,8 @@ class VivEventClient(viv_base.VivEventCore):
         self.state = vw.getMeta('revsync')
 
     # make sure all VA's are reduced to base-addr-offsets
-    def VWE_COMMENT(self, vw, event, locinfo):  #done
-        logger.warning("%r  %r  %r" % (vw, event, locinfo))
+    def VWE_COMMENT(self, vw, event, locinfo):
+        logger.info("%r  %r  %r" % (vw, event, locinfo))
         cmt_addr, cmt = locinfo
         # make sure something has changed (and that we're not repeating what we just received from revsync
         # publish comment to revsync
@@ -422,8 +422,8 @@ class VivEventClient(viv_base.VivEventCore):
             except NoChange:
                 pass
 
-    def VWE_SETNAME(self, vw, event, locinfo):  #done
-        logger.warning("%r  %r  %r" % (vw, event, locinfo))
+    def VWE_SETNAME(self, vw, event, locinfo):
+        logger.info("%r  %r  %r" % (vw, event, locinfo))
         name_addr, name = locinfo
         addr = get_can_addr(vw, name_addr)
         if self.state.syms.get(addr) != name:
@@ -486,7 +486,7 @@ client = None
 evtdist = None
 
 
-def revsync_load(vw):   #done
+def revsync_load(vw):
     global client, evtdist
     vw.vprint('Connecting to RevSync Server')
 
@@ -517,7 +517,7 @@ def revsync_load(vw):   #done
         evtdist = VivEventClient(vw)
 
 
-def toggle_visits(vw):  #done
+def toggle_visits(vw):
     state = State.get(vw)
     state.show_visits = not state.show_visits
     if state.show_visits:
@@ -526,7 +526,7 @@ def toggle_visits(vw):  #done
         vw.vprint("Visit Visualization Disabled (Red)")
     state.color_now = True
 
-def toggle_time(vw):    #done
+def toggle_time(vw):
     state = State.get(vw)
     state.show_time = not state.show_time
     if state.show_time:
@@ -535,7 +535,7 @@ def toggle_time(vw):    #done
         vw.vprint("Time Visualization Disabled (Blue)")
     state.color_now = True
 
-def toggle_visitors(vw):    #done
+def toggle_visitors(vw):
     state = State.get(vw)
     state.show_visitors = not state.show_visitors
     if state.show_visitors:
@@ -544,7 +544,7 @@ def toggle_visitors(vw):    #done
         vw.vprint("Visitor Visualization Disabled (Green)")
     state.color_now = True
 
-def toggle_track(vw):   #done
+def toggle_track(vw):
     state = State.get(vw)
     state.track_coverage = not state.track_coverage
     if state.track_coverage:
