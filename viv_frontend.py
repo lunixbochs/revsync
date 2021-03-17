@@ -1,6 +1,7 @@
 import math
 import time
 import hashlib
+import logging
 from collections import defaultdict
 
 from vivisect import *
@@ -11,6 +12,8 @@ from comments import Comments, NoChange
 from coverage import Coverage
 from threading import Lock
 from collections import namedtuple
+
+logger = logging.getLogger(__name__)
 
 Struct = namedtuple('Struct', 'name typedef')
 
@@ -292,7 +295,7 @@ def colour_coverage(bv, cur_func):
 
 ### handle remote events:
 def onmsg(vw, key, data, replay):
-    print("onmsg: %r : %r  (%r)" % (key, data, replay))
+    logger.warning("onmsg: %r : %r  (%r)" % (key, data, replay))
     try:
         state = State.get(vw)
         meta = state.getMetaBySha(key)
@@ -343,142 +346,33 @@ def onmsg(vw, key, data, replay):
         elif cmd == 'struc_created':
             # note: binja does not seem to appreciate the encoding of strings from redis
             struct_name = data['struc_name'].encode('ascii', 'ignore')
-            '''  not ready to wrap this into Viv yet.
-            state.structs_lock.acquire()
-            struct = bv.get_type_by_name(struct_name)
-            # if a struct with the same name already exists, undefine it
-            if struct:
-                bv.undefine_user_type(struct_name)
-            struct = Structure()
-            bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
         
         elif cmd == 'struc_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
-            '''  not ready to wrap this into Viv yet.
-            state.stackvar_lock.acquire()
-            struct = bv.get_type_by_name(struct_name)
-            # make sure the type is defined first
-            if struct is None:
-                vw.vprint('revsync: unknown struct name %s during struc_deleted cmd' % struct_name)
-                return
-            bv.undefine_user_type(struct_name)
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
         
         elif cmd == 'struc_renamed':
             old_struct_name = data['old_name'].encode('ascii', 'ignore')
             new_struct_name = data['new_name'].encode('ascii', 'ignore')
-            '''  not ready to wrap this into Viv yet.
-            state.structs_lock.acquire()
-            struct = bv.get_type_by_name(old_struct_name)
-            # make sure the type is defined first
-            if struct is None:
-                vw.vprint('revsync: unknown struct name %s during struc_renamed cmd' % old_struct_name)
-                return
-            bv.rename_type(old_struct_name, new_struct_name)
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s %s' % (user, cmd, old_struct_name, new_struct_name))
         
         elif cmd == 'struc_member_created':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
-            '''  not ready to wrap this into Viv yet.
-            state.structs_lock.acquire()
-            struct = bv.get_type_by_name(struct_name)
-            if struct is None:
-                vw.vprint('revsync: unknown struct name %s during struc_member_created cmd' % struct_name)
-                return
-            member_name = data['member_name'].encode('ascii', 'ignore')
-            struct_type = get_type_by_size(bv, data['size'])
-            if struct_type is None:
-                vw.vprint('revsync: bad struct member size %d for member %s during struc_member_created cmd' % (data['size'], member_name))
-                return
-            # need actual Structure class, not Type
-            struct = struct.structure
-            struct.insert(data['offset'], struct_type, member_name)
-            # we must redefine the type
-            bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
         
         elif cmd == 'struc_member_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             member_name = '???'
-            '''  not ready to wrap this into Viv yet.
-            state.structs_lock.acquire()
-            struct = bv.get_type_by_name(struct_name)
-            if struct is None:
-                vw.vprint('revsync: unknown struct name %s during struc_member_deleted cmd' % struct_name)
-                return
-            offset = data['offset']
-            # need actual Structure class, not Type
-            struct = struct.structure
-            # walk the list and find the index to delete (seriously, why by index binja and not offset?)
-            member_name = '???'
-            for i,m in enumerate(struct.members):
-                if m.offset == offset:
-                    # found it
-                    member_name = m.name
-                    struct.remove(i)
-            # we must redefine the type
-            bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
             
         elif cmd == 'struc_member_renamed':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             member_name = data['member_name'].encode('ascii', 'ignore')
-            '''  not ready to wrap this into Viv yet.
-            state.structs_lock.acquire()
-            struct = bv.get_type_by_name(struct_name)
-            if struct is None:
-                vw.vprint('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
-                return
-            offset = data['offset']
-            # need actual Structure class, not Type
-            struct = struct.structure
-            for i,m in enumerate(struct.members):
-                if m.offset == offset:
-                    struct.replace(i, m.type, member_name)
-                    bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-                    vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
-                    break
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
 
         elif cmd == 'struc_member_changed':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
-            '''  not ready to wrap this into Viv yet.
-            state.structs_lock.acquire()
-            struct = bv.get_type_by_name(struct_name)
-            if struct is None:
-                vw.vprint('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
-                return
-            # need actual Structure class, not Type
-            struct = struct.structure
-            offset = data['offset']
-            for i,m in enumerate(struct.members):
-                if m.offset == offset:
-                    struct.replace(i, get_type_by_size(bv, data['size']), m.name)
-                    bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-                    vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, m.name))
-                    break
-            state.structs = get_structs(bv)
-            state.structs_lock.release()
-            '''
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, m.name))
 
         elif cmd == 'join':
@@ -511,7 +405,7 @@ class VivEventClient(viv_base.VivEventCore):
 
     # make sure all VA's are reduced to base-addr-offsets
     def VWE_COMMENT(self, vw, event, locinfo):  #done
-        print("%r  %r  %r" % (vw, event, locinfo))
+        logger.warning("%r  %r  %r" % (vw, event, locinfo))
         cmt_addr, cmt = locinfo
         # make sure something has changed (and that we're not repeating what we just received from revsync
         # publish comment to revsync
@@ -529,7 +423,7 @@ class VivEventClient(viv_base.VivEventCore):
                 pass
 
     def VWE_SETNAME(self, vw, event, locinfo):  #done
-        print("%r  %r  %r" % (vw, event, locinfo))
+        logger.warning("%r  %r  %r" % (vw, event, locinfo))
         name_addr, name = locinfo
         addr = get_can_addr(vw, name_addr)
         if self.state.syms.get(addr) != name:

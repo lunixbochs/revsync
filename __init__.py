@@ -42,7 +42,7 @@ except ImportError:
     pass
 
 # check if running in Vivisect:
-if globals().get('vw') is not None:
+if 'vw' in globals():
     try:
         import vivisect
         try:
