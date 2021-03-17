@@ -33,13 +33,13 @@ class State:
         self.cov = Coverage()
         self.comments = Comments()
         self.running = True
-        self.cmt_changes = {} 
+        self.cmt_changes = {}
         self.cmt_lock = Lock()
-        self.stackvar_changes = {} 
+        self.stackvar_changes = {}
         self.stackvar_lock = Lock()
         self.syms = get_syms(vw)
         self.syms_lock = Lock()
-        self.structs = {}   # get_structs(vw) 
+        self.structs = {}   # get_structs(vw)
         self.structs_lock = Lock()
 
         self.filedata_by_sha = {}
@@ -230,7 +230,8 @@ def watch_structs(vw):
                     # struct renamed, publish
                     vw.vprint('revsync: user renamed struct %s' % struct_name)
                     publish(bv, {'cmd': 'struc_renamed', 'old_name': str(last_name), 'new_name': str(struct_name)})
-                
+
+                    
                 # check for member differences
                 members = member_dict_from_list(struct.typedef.members)
                 last_members = member_dict_from_list(last_struct.typedef.members)
@@ -347,25 +348,26 @@ def onmsg(vw, key, data, replay):
             # note: binja does not seem to appreciate the encoding of strings from redis
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
-        
+
+
         elif cmd == 'struc_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
-        
+
         elif cmd == 'struc_renamed':
             old_struct_name = data['old_name'].encode('ascii', 'ignore')
             new_struct_name = data['new_name'].encode('ascii', 'ignore')
             vw.vprint('revsync: <%s> %s %s %s' % (user, cmd, old_struct_name, new_struct_name))
-        
+
         elif cmd == 'struc_member_created':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
-        
+
         elif cmd == 'struc_member_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             member_name = '???'
             vw.vprint('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
-            
+
         elif cmd == 'struc_member_renamed':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             member_name = data['member_name'].encode('ascii', 'ignore')
