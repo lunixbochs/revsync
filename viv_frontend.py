@@ -231,6 +231,7 @@ def watch_structs(vw):
                     vw.vprint('revsync: user renamed struct %s' % struct_name)
                     publish(bv, {'cmd': 'struc_renamed', 'old_name': str(last_name), 'new_name': str(struct_name)})
 
+                    
                 # check for member differences
                 members = member_dict_from_list(struct.typedef.members)
                 last_members = member_dict_from_list(last_struct.typedef.members)
@@ -347,6 +348,7 @@ def onmsg(vw, key, data, replay):
             # note: binja does not seem to appreciate the encoding of strings from redis
             struct_name = data['struc_name'].encode('ascii', 'ignore')
             vw.vprint('revsync: <%s> %s %s' % (user, cmd, struct_name))
+
 
         elif cmd == 'struc_deleted':
             struct_name = data['struc_name'].encode('ascii', 'ignore')
@@ -563,3 +565,4 @@ def vivExtension(vw, vwgui):
     vwgui.vqAddMenuField('&Plugins.&revsync.&Coverage: Toggle Time (BLUE)', toggle_time, args=(vw,))
     vwgui.vqAddMenuField('&Plugins.&revsync.&Coverage: Toggle Visitors (GREEN)', toggle_visitors, args=(vw,))
     vwgui.vqAddMenuField('&Plugins.&revsync.&load: Load revsync for binary(s) in this workspace', revsync_load, args=(vw,))
+
