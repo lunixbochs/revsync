@@ -221,7 +221,7 @@ def onmsg(bv, key, data, replay):
         state.structs_lock.release()
         log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
     elif cmd == 'struc_deleted':
-        state.stackvar_lock.acquire()
+        state.structs_lock.acquire()
         struct_name = data['struc_name'].encode('ascii', 'ignore')
         struct = bv.get_type_by_name(struct_name)
         # make sure the type is defined first
