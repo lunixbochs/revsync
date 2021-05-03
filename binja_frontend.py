@@ -210,7 +210,7 @@ def onmsg(bv, key, data, replay):
     elif cmd == 'struc_created':
         state.structs_lock.acquire()
         # note: binja does not seem to appreciate the encoding of strings from redis
-        struct_name = data['struc_name'].encode('ascii', 'ignore')
+        struct_name = data['struc_name']
         struct = bv.get_type_by_name(struct_name)
         # if a struct with the same name already exists, undefine it
         if struct:
@@ -221,12 +221,13 @@ def onmsg(bv, key, data, replay):
         state.structs_lock.release()
         log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
     elif cmd == 'struc_deleted':
-        state.stackvar_lock.acquire()
-        struct_name = data['struc_name'].encode('ascii', 'ignore')
+        state.structs_lock.acquire()
+        struct_name = data['struc_name']
         struct = bv.get_type_by_name(struct_name)
         # make sure the type is defined first
         if struct is None:
             log_info('revsync: unknown struct name %s during struc_deleted cmd' % struct_name)
+            state.structs_lock.release()
             return
         bv.undefine_user_type(struct_name)
         state.structs = get_structs(bv)
@@ -234,12 +235,13 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
     elif cmd == 'struc_renamed':
         state.structs_lock.acquire()
-        old_struct_name = data['old_name'].encode('ascii', 'ignore')
-        new_struct_name = data['new_name'].encode('ascii', 'ignore')
+        old_struct_name = data['old_name']
+        new_struct_name = data['new_name']
         struct = bv.get_type_by_name(old_struct_name)
         # make sure the type is defined first
         if struct is None:
             log_info('revsync: unknown struct name %s during struc_renamed cmd' % old_struct_name)
+            state.structs_lock.release()
             return
         bv.rename_type(old_struct_name, new_struct_name)
         state.structs = get_structs(bv)
@@ -247,18 +249,19 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> %s %s %s' % (user, cmd, old_struct_name, new_struct_name))
     elif cmd == 'struc_member_created':
         state.structs_lock.acquire()
-        struct_name = data['struc_name'].encode('ascii', 'ignore')
+        struct_name = data['struc_name']
         struct = bv.get_type_by_name(struct_name)
         if struct is None:
             log_info('revsync: unknown struct name %s during struc_member_created cmd' % struct_name)
+            state.structs_lock.release()
             return
-        member_name = data['member_name'].encode('ascii', 'ignore')
+        member_name = data['member_name']
         struct_type = get_type_by_size(bv, data['size'])
         if struct_type is None:
             log_info('revsync: bad struct member size %d for member %s during struc_member_created cmd' % (data['size'], member_name))
             return
         # need actual Structure class, not Type
-        struct = struct.structure
+        struct = struct.structure.mutable_copy()
         struct.insert(data['offset'], struct_type, member_name)
         # we must redefine the type
         bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
@@ -267,14 +270,15 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
     elif cmd == 'struc_member_deleted':
         state.structs_lock.acquire()
-        struct_name = data['struc_name'].encode('ascii', 'ignore')
+        struct_name = data['struc_name']
         struct = bv.get_type_by_name(struct_name)
         if struct is None:
             log_info('revsync: unknown struct name %s during struc_member_deleted cmd' % struct_name)
+            state.structs_lock.release()
             return
         offset = data['offset']
         # need actual Structure class, not Type
-        struct = struct.structure
+        struct = struct.structure.mutable_copy()
         # walk the list and find the index to delete (seriously, why by index binja and not offset?)
         member_name = '???'
         for i,m in enumerate(struct.members):
@@ -289,15 +293,16 @@ def onmsg(bv, key, data, replay):
         log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
     elif cmd == 'struc_member_renamed':
         state.structs_lock.acquire()
-        struct_name = data['struc_name'].encode('ascii', 'ignore')
-        member_name = data['member_name'].encode('ascii', 'ignore')
+        struct_name = data['struc_name']
+        member_name = data['member_name']
         struct = bv.get_type_by_name(struct_name)
         if struct is None:
             log_info('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
+            state.structs_lock.release()
             return
         offset = data['offset']
         # need actual Structure class, not Type
-        struct = struct.structure
+        struct = struct.structure.mutable_copy()
         for i,m in enumerate(struct.members):
             if m.offset == offset:
                 struct.replace(i, m.type, member_name)
@@ -308,13 +313,14 @@ def onmsg(bv, key, data, replay):
         state.structs_lock.release()
     elif cmd == 'struc_member_changed':
         state.structs_lock.acquire()
-        struct_name = data['struc_name'].encode('ascii', 'ignore')
+        struct_name = data['struc_name']
         struct = bv.get_type_by_name(struct_name)
         if struct is None:
             log_info('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
+            state.structs_lock.release()
             return
         # need actual Structure class, not Type
-        struct = struct.structure
+        struct = struct.structure.mutable_copy()
         offset = data['offset']
         for i,m in enumerate(struct.members):
             if m.offset == offset:
