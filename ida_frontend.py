@@ -129,8 +129,12 @@ class IDPHooks(IDP_Hooks):
         return IDP_Hooks.auto_empty_finally(self)
 
 class IDBHooks(IDB_Hooks):
-    def renamed(self, ea, new_name, local_name):
+    def renamed(self, ea, new_name, local_name, old_name=None):
         on_renamed(ea, new_name, local_name)
+
+        if (idaapi.IDA_SDK_VERSION >= 760):
+            return IDB_Hooks.renamed(self, ea, new_name, local_name, old_name)
+
         return IDB_Hooks.renamed(self, ea, new_name, local_name)
 
     def auto_empty_finally(self):
