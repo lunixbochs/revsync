@@ -114,7 +114,6 @@ class Client:
                         except Exception:
                             print('error replaying history', data)
                             traceback.print_exc()
-                    print("successfully replayed history")
                 else:
                     print('unknown redis push', item)
             except Exception:
