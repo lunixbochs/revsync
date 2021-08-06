@@ -174,162 +174,146 @@ def onmsg(bv, key, data, replay):
     cmd, user = data['cmd'], data['user']
     ts = int(data.get('ts', 0))
     if cmd == 'comment':
-        state.cmt_lock.acquire()
-        log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
-        addr = get_ea(bv, int(data['addr']))
-        func = get_func_by_addr(bv, addr)
-        # binja does not support comments on data symbols??? IDA does.
-        if func is not None:
-            text = state.comments.set(addr, user, data['text'], ts)
-            func.set_comment(addr, text)
-            state.cmt_changes[addr] = text
-        state.cmt_lock.release()
+        with state.cmt_lock:
+            log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
+            addr = get_ea(bv, int(data['addr']))
+            func = get_func_by_addr(bv, addr)
+            # binja does not support comments on data symbols??? IDA does.
+            if func is not None:
+                text = state.comments.set(addr, user, data['text'], ts)
+                func.set_comment(addr, text)
+                state.cmt_changes[addr] = text
     elif cmd == 'extra_comment':
         log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
     elif cmd == 'area_comment':
         log_info('revsync: <%s> %s %s %s' % (user, cmd, data['range'], data['text']))
     elif cmd == 'rename':
-        state.syms_lock.acquire()
-        log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
-        addr = get_ea(bv, int(data['addr']))
-        rename_symbol(bv, addr, data['text'])
-        state.data_syms = get_syms(bv, SymbolType.DataSymbol)
-        state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
-        state.syms_lock.release()
+        with state.syms_lock:
+            log_info('revsync: <%s> %s %#x %s' % (user, cmd, data['addr'], data['text']))
+            addr = get_ea(bv, int(data['addr']))
+            rename_symbol(bv, addr, data['text'])
+            state.data_syms = get_syms(bv, SymbolType.DataSymbol)
+            state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
     elif cmd == 'stackvar_renamed':
-        state.stackvar_lock.acquire()
-        func_name = '???'
-        func = get_func_by_addr(bv, data['addr'])
-        if func:
-            func_name = func.name
-        log_info('revsync: <%s> %s %s %#x %s' % (user, cmd, func_name, data['offset'], data['name']))
-        rename_stackvar(bv, data['addr'], data['offset'], data['name'])
-        # save stackvar changes using the tuple (func_addr, offset) as key
-        state.stackvar_changes[(data['addr'],data['offset'])] = data['name']
-        state.stackvar_lock.release()
+        with state.stackvar_lock:
+            func_name = '???'
+            func = get_func_by_addr(bv, data['addr'])
+            if func:
+                func_name = func.name
+            log_info('revsync: <%s> %s %s %#x %s' % (user, cmd, func_name, data['offset'], data['name']))
+            rename_stackvar(bv, data['addr'], data['offset'], data['name'])
+            # save stackvar changes using the tuple (func_addr, offset) as key
+            state.stackvar_changes[(data['addr'],data['offset'])] = data['name']
     elif cmd == 'struc_created':
-        state.structs_lock.acquire()
-        # note: binja does not seem to appreciate the encoding of strings from redis
-        struct_name = data['struc_name']
-        struct = bv.get_type_by_name(struct_name)
-        # if a struct with the same name already exists, undefine it
-        if struct:
-            bv.undefine_user_type(struct_name)
-        struct = Structure()
-        bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
-        log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
+        with state.structs_lock:
+            # note: binja does not seem to appreciate the encoding of strings from redis
+            struct_name = data['struc_name']
+            struct = bv.get_type_by_name(struct_name)
+            # if a struct with the same name already exists, undefine it
+            if struct:
+                bv.undefine_user_type(struct_name)
+            struct = Structure()
+            bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
+            state.structs = get_structs(bv)
+            log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
     elif cmd == 'struc_deleted':
-        state.structs_lock.acquire()
-        struct_name = data['struc_name']
-        struct = bv.get_type_by_name(struct_name)
-        # make sure the type is defined first
-        if struct is None:
-            log_info('revsync: unknown struct name %s during struc_deleted cmd' % struct_name)
-            state.structs_lock.release()
-            return
-        bv.undefine_user_type(struct_name)
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
-        log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
+        with state.structs_lock:
+            struct_name = data['struc_name']
+            struct = bv.get_type_by_name(struct_name)
+            # make sure the type is defined first
+            if struct is None:
+                log_info('revsync: unknown struct name %s during struc_deleted cmd' % struct_name)
+                return
+            bv.undefine_user_type(struct_name)
+            state.structs = get_structs(bv)
+            log_info('revsync: <%s> %s %s' % (user, cmd, struct_name))
     elif cmd == 'struc_renamed':
-        state.structs_lock.acquire()
-        old_struct_name = data['old_name']
-        new_struct_name = data['new_name']
-        struct = bv.get_type_by_name(old_struct_name)
-        # make sure the type is defined first
-        if struct is None:
-            log_info('revsync: unknown struct name %s during struc_renamed cmd' % old_struct_name)
-            state.structs_lock.release()
-            return
-        bv.rename_type(old_struct_name, new_struct_name)
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
-        log_info('revsync: <%s> %s %s %s' % (user, cmd, old_struct_name, new_struct_name))
+        with state.structs_lock:
+            old_struct_name = data['old_name']
+            new_struct_name = data['new_name']
+            struct = bv.get_type_by_name(old_struct_name)
+            # make sure the type is defined first
+            if struct is None:
+                log_info('revsync: unknown struct name %s during struc_renamed cmd' % old_struct_name)
+                return
+            bv.rename_type(old_struct_name, new_struct_name)
+            state.structs = get_structs(bv)
+            log_info('revsync: <%s> %s %s %s' % (user, cmd, old_struct_name, new_struct_name))
     elif cmd == 'struc_member_created':
-        state.structs_lock.acquire()
-        struct_name = data['struc_name']
-        struct = bv.get_type_by_name(struct_name)
-        if struct is None:
-            log_info('revsync: unknown struct name %s during struc_member_created cmd' % struct_name)
-            state.structs_lock.release()
-            return
-        member_name = data['member_name']
-        struct_type = get_type_by_size(bv, data['size'])
-        if struct_type is None:
-            log_info('revsync: bad struct member size %d for member %s during struc_member_created cmd' % (data['size'], member_name))
-            return
-        # need actual Structure class, not Type
-        struct = struct.structure.mutable_copy()
-        struct.insert(data['offset'], struct_type, member_name)
-        # we must redefine the type
-        bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
-        log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
+        with state.structs_lock:
+            struct_name = data['struc_name']
+            struct = bv.get_type_by_name(struct_name)
+            if struct is None:
+                log_info('revsync: unknown struct name %s during struc_member_created cmd' % struct_name)
+                return
+            member_name = data['member_name']
+            struct_type = get_type_by_size(bv, data['size'])
+            if struct_type is None:
+                log_info('revsync: bad struct member size %d for member %s during struc_member_created cmd' % (data['size'], member_name))
+                return
+            # need actual Structure class, not Type
+            struct = struct.structure.mutable_copy()
+            struct.insert(data['offset'], struct_type, member_name)
+            # we must redefine the type
+            bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
+            state.structs = get_structs(bv)
+            log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
     elif cmd == 'struc_member_deleted':
-        state.structs_lock.acquire()
-        struct_name = data['struc_name']
-        struct = bv.get_type_by_name(struct_name)
-        if struct is None:
-            log_info('revsync: unknown struct name %s during struc_member_deleted cmd' % struct_name)
-            state.structs_lock.release()
-            return
-        offset = data['offset']
-        # need actual Structure class, not Type
-        struct = struct.structure.mutable_copy()
-        # walk the list and find the index to delete (seriously, why by index binja and not offset?)
-        member_name = '???'
-        for i,m in enumerate(struct.members):
-            if m.offset == offset:
-                # found it
-                member_name = m.name
-                struct.remove(i)
-        # we must redefine the type
-        bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
-        log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
+        with state.structs_lock:
+            struct_name = data['struc_name']
+            struct = bv.get_type_by_name(struct_name)
+            if struct is None:
+                log_info('revsync: unknown struct name %s during struc_member_deleted cmd' % struct_name)
+                return
+            offset = data['offset']
+            # need actual Structure class, not Type
+            struct = struct.structure.mutable_copy()
+            # walk the list and find the index to delete (seriously, why by index binja and not offset?)
+            member_name = '???'
+            for i,m in enumerate(struct.members):
+                if m.offset == offset:
+                    # found it
+                    member_name = m.name
+                    struct.remove(i)
+            # we must redefine the type
+            bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
+            state.structs = get_structs(bv)
+            log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
     elif cmd == 'struc_member_renamed':
-        state.structs_lock.acquire()
-        struct_name = data['struc_name']
-        member_name = data['member_name']
-        struct = bv.get_type_by_name(struct_name)
-        if struct is None:
-            log_info('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
-            state.structs_lock.release()
-            return
-        offset = data['offset']
-        # need actual Structure class, not Type
-        struct = struct.structure.mutable_copy()
-        for i,m in enumerate(struct.members):
-            if m.offset == offset:
-                struct.replace(i, m.type, member_name)
-                bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-                log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
-                break
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
+        with state.structs_lock:
+            struct_name = data['struc_name']
+            member_name = data['member_name']
+            struct = bv.get_type_by_name(struct_name)
+            if struct is None:
+                log_info('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
+                return
+            offset = data['offset']
+            # need actual Structure class, not Type
+            struct = struct.structure.mutable_copy()
+            for i,m in enumerate(struct.members):
+                if m.offset == offset:
+                    struct.replace(i, m.type, member_name)
+                    bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
+                    log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, member_name))
+                    break
+            state.structs = get_structs(bv)
     elif cmd == 'struc_member_changed':
-        state.structs_lock.acquire()
-        struct_name = data['struc_name']
-        struct = bv.get_type_by_name(struct_name)
-        if struct is None:
-            log_info('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
-            state.structs_lock.release()
-            return
-        # need actual Structure class, not Type
-        struct = struct.structure.mutable_copy()
-        offset = data['offset']
-        for i,m in enumerate(struct.members):
-            if m.offset == offset:
-                struct.replace(i, get_type_by_size(bv, data['size']), m.name)
-                bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
-                log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, m.name))
-                break
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
+        with state.structs_lock:
+            struct_name = data['struc_name']
+            struct = bv.get_type_by_name(struct_name)
+            if struct is None:
+                log_info('revsync: unknown struct name %s during struc_member_renamed cmd' % struct_name)
+                return
+            # need actual Structure class, not Type
+            struct = struct.structure.mutable_copy()
+            offset = data['offset']
+            for i,m in enumerate(struct.members):
+                if m.offset == offset:
+                    struct.replace(i, get_type_by_size(bv, data['size']), m.name)
+                    bv.define_user_type(struct_name, binaryninja.types.Type.structure_type(struct))
+                    log_info('revsync: <%s> %s %s->%s' % (user, cmd, struct_name, m.name))
+                    break
+            state.structs = get_structs(bv)
     elif cmd == 'join':
         log_info('revsync: <%s> joined' % (user))
     elif cmd == 'coverage':
@@ -379,60 +363,59 @@ def watch_structs(bv):
     state = State.get(bv)
 
     while state.running:
-        state.structs_lock.acquire()
-        structs = get_structs(bv)
-        if structs != state.structs:
-            for struct_id, struct in structs.items():
-                last_struct = state.structs.get(struct_id)
-                struct_name = struct.name
-                if last_struct == None:
-                    # new struct created, publish
-                    log_info('revsync: user created struct %s' % struct_name)
-                    # binja can't really handle unions at this time
-                    publish(bv, {'cmd': 'struc_created', 'struc_name': str(struct_name), 'is_union': False})
-                    # if there are already members, publish them
+        with state.structs_lock:
+            structs = get_structs(bv)
+            if structs != state.structs:
+                for struct_id, struct in structs.items():
+                    last_struct = state.structs.get(struct_id)
+                    struct_name = struct.name
+                    if last_struct == None:
+                        # new struct created, publish
+                        log_info('revsync: user created struct %s' % struct_name)
+                        # binja can't really handle unions at this time
+                        publish(bv, {'cmd': 'struc_created', 'struc_name': str(struct_name), 'is_union': False})
+                        # if there are already members, publish them
+                        members = member_dict_from_list(struct.typedef.members)
+                        if members:
+                            for member_name, member_def in members.items():
+                                publish(bv, {'cmd': 'struc_member_created', 'struc_name': str(struct_name), 'offset': member_def.offset, 'member_name': member_name, 'size': member_def.type.width, 'flag': None})
+                        continue
+                    last_name = last_struct.name
+                    if last_name != struct_name:
+                        # struct renamed, publish
+                        log_info('revsync: user renamed struct %s' % struct_name)
+                        publish(bv, {'cmd': 'struc_renamed', 'old_name': str(last_name), 'new_name': str(struct_name)})
+
+                    # check for member differences
                     members = member_dict_from_list(struct.typedef.members)
-                    if members:
-                        for member_name, member_def in members.items():
-                            publish(bv, {'cmd': 'struc_member_created', 'struc_name': str(struct_name), 'offset': member_def.offset, 'member_name': member_name, 'size': member_def.type.width, 'flag': None})
-                    continue
-                last_name = last_struct.name
-                if last_name != struct_name:
-                    # struct renamed, publish
-                    log_info('revsync: user renamed struct %s' % struct_name)
-                    publish(bv, {'cmd': 'struc_renamed', 'old_name': str(last_name), 'new_name': str(struct_name)})
+                    last_members = member_dict_from_list(last_struct.typedef.members)
 
-                # check for member differences
-                members = member_dict_from_list(struct.typedef.members)
-                last_members = member_dict_from_list(last_struct.typedef.members)
+                    # first checks for deletions
+                    removed_members = set(last_members.keys()) - set(members.keys())
+                    for member in removed_members:
+                        log_info('revsync: user deleted struct member %s in struct %s' % (last_members[member].name, str(struct_name)))
+                        publish(bv, {'cmd': 'struc_member_deleted', 'struc_name': str(struct_name), 'offset': last_members[member].offset})
 
-                # first checks for deletions
-                removed_members = set(last_members.keys()) - set(members.keys())
-                for member in removed_members:
-                    log_info('revsync: user deleted struct member %s in struct %s' % (last_members[member].name, str(struct_name)))
-                    publish(bv, {'cmd': 'struc_member_deleted', 'struc_name': str(struct_name), 'offset': last_members[member].offset})
+                    # now check for additions
+                    new_members = set(members.keys()) - set(last_members.keys())
+                    for member in new_members:
+                        log_info('revsync: user added struct member %s in struct %s' % (members[member].name, str(struct_name)))
+                        publish(bv, {'cmd': 'struc_member_created', 'struc_name': str(struct_name), 'offset': members[member].offset, 'member_name': str(member), 'size': members[member].type.width, 'flag': None})
 
-                # now check for additions
-                new_members = set(members.keys()) - set(last_members.keys())
-                for member in new_members:
-                    log_info('revsync: user added struct member %s in struct %s' % (members[member].name, str(struct_name)))
-                    publish(bv, {'cmd': 'struc_member_created', 'struc_name': str(struct_name), 'offset': members[member].offset, 'member_name': str(member), 'size': members[member].type.width, 'flag': None})
+                    # check for changes among intersection of members
+                    intersec = set(members.keys()) & set(last_members.keys())
+                    for m in intersec:
+                        if members[m].type.width != last_members[m].type.width:
+                            # type (i.e., size) changed
+                            log_info('revsync: user changed struct member %s in struct %s' % (members[m].name, str(struct_name)))
+                            publish(bv, {'cmd': 'struc_member_changed', 'struc_name': str(struct_name), 'offset': members[m].offset, 'size': members[m].type.width})
 
-                # check for changes among intersection of members
-                intersec = set(members.keys()) & set(last_members.keys())
-                for m in intersec:
-                    if members[m].type.width != last_members[m].type.width:
-                        # type (i.e., size) changed
-                        log_info('revsync: user changed struct member %s in struct %s' % (members[m].name, str(struct_name)))
-                        publish(bv, {'cmd': 'struc_member_changed', 'struc_name': str(struct_name), 'offset': members[m].offset, 'size': members[m].type.width})
-
-            for struct_id, struct_def in state.structs.items():
-                if structs.get(struct_id) == None:
-                    # struct deleted, publish
-                    log_info('revsync: user deleted struct %s' % struct_def.name)
-                    publish(bv, {'cmd': 'struc_deleted', 'struc_name': str(struct_def.name)})
-        state.structs = get_structs(bv)
-        state.structs_lock.release()
+                for struct_id, struct_def in state.structs.items():
+                    if structs.get(struct_id) == None:
+                        # struct deleted, publish
+                        log_info('revsync: user deleted struct %s' % struct_def.name)
+                        publish(bv, {'cmd': 'struc_deleted', 'struc_name': str(struct_def.name)})
+            state.structs = get_structs(bv)
         time.sleep(0.5)
 
 def watch_syms(bv, sym_type):
@@ -440,29 +423,28 @@ def watch_syms(bv, sym_type):
     state = State.get(bv)
 
     while state.running:
-        state.syms_lock.acquire()
-        # DataSymbol
-        data_syms = get_syms(bv, SymbolType.DataSymbol)
-        if data_syms != state.data_syms:
-            for addr, name in data_syms.items():
-                if state.data_syms.get(addr) != name:
-                    # name changed, publish
-                    log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
-                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
+        with state.syms_lock:
+            # DataSymbol
+            data_syms = get_syms(bv, SymbolType.DataSymbol)
+            if data_syms != state.data_syms:
+                for addr, name in data_syms.items():
+                    if state.data_syms.get(addr) != name:
+                        # name changed, publish
+                        log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
+                        publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
 
-        # FunctionSymbol
-        func_syms = get_syms(bv, SymbolType.FunctionSymbol)
-        if func_syms != state.func_syms:
-            for addr, name in func_syms.items():
-                if state.func_syms.get(addr) != name:
-                    # name changed, publish
-                    log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
-                    publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
+            # FunctionSymbol
+            func_syms = get_syms(bv, SymbolType.FunctionSymbol)
+            if func_syms != state.func_syms:
+                for addr, name in func_syms.items():
+                    if state.func_syms.get(addr) != name:
+                        # name changed, publish
+                        log_info('revsync: user renamed symbol at %#x: %s' % (addr, name))
+                        publish(bv, {'cmd': 'rename', 'addr': get_can_addr(bv, addr), 'text': name})
 
-        state.data_syms = get_syms(bv, SymbolType.DataSymbol)
-        state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
-        state.syms_lock.release()
-        time.sleep(0.5)
+            state.data_syms = get_syms(bv, SymbolType.DataSymbol)
+            state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
+            time.sleep(0.5)
 
 def watch_cur_func(bv):
     """ Watch current function (if we're in code) for comment changes and publish diffs """
@@ -491,53 +473,51 @@ def watch_cur_func(bv):
         else:
             # were we just in a function?
             if last_func:
-                state.cmt_lock.acquire()
-                comments = last_func.comments
-                # check for changed comments
-                for cmt_addr, cmt in comments.items():
-                    last_cmt = state.cmt_changes.get(cmt_addr)
-                    if last_cmt == None or last_cmt != cmt:
-                        # new/changed comment, publish
-                        try:
-                            addr = get_can_addr(bv, cmt_addr)
-                            changed = state.comments.parse_comment_update(addr, client.nick, cmt)
-                            log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
-                            publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
-                            state.cmt_changes[cmt_addr] = changed
-                        except NoChange:
-                            pass
-                        continue
+                with state.cmt_lock:
+                    comments = last_func.comments
+                    # check for changed comments
+                    for cmt_addr, cmt in comments.items():
+                        last_cmt = state.cmt_changes.get(cmt_addr)
+                        if last_cmt == None or last_cmt != cmt:
+                            # new/changed comment, publish
+                            try:
+                                addr = get_can_addr(bv, cmt_addr)
+                                changed = state.comments.parse_comment_update(addr, client.nick, cmt)
+                                log_info('revsync: user changed comment: %#x, %s' % (addr, changed))
+                                publish(bv, {'cmd': 'comment', 'addr': addr, 'text': changed})
+                                state.cmt_changes[cmt_addr] = changed
+                            except NoChange:
+                                pass
+                            continue
 
-                # TODO: this needs to be fixed later
-                """
-                # check for removed comments
-                if last_comments:
-                    removed = set(last_comments.keys()) - set(comments.keys())
-                    for addr in removed:
-                        addr = get_can_addr(bv, addr)
-                        log_info('revsync: user removed comment: %#x' % addr)
-                        publish(bv, {'cmd': 'comment', 'addr': addr, 'text': ''})
-                """
-                state.cmt_lock.release()
+                    # TODO: this needs to be fixed later
+                    """
+                    # check for removed comments
+                    if last_comments:
+                        removed = set(last_comments.keys()) - set(comments.keys())
+                        for addr in removed:
+                            addr = get_can_addr(bv, addr)
+                            log_info('revsync: user removed comment: %#x' % addr)
+                            publish(bv, {'cmd': 'comment', 'addr': addr, 'text': ''})
+                    """
 
                 # similar dance, but with stackvars
-                state.stackvar_lock.acquire()
-                stackvars = stack_dict_from_list(last_func.vars)
-                for offset, data in stackvars.items():
-                    # stack variables are more difficult than comments to keep state on, since they
-                    # exist from the beginning, and have a type.  track each one.  start by tracking the first
-                    # time we see it.  if there are changes after that, publish.
-                    stackvar_name, stackvar_type = data
-                    stackvar_val = state.stackvar_changes.get((last_func.start,offset))
-                    if stackvar_val == None:
-                        # never seen before, start tracking
-                        state.stackvar_changes[(last_func.start,offset)] = stackvar_name
-                    elif stackvar_val != stackvar_name:
-                        # stack var name changed, publish
-                        log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, stackvar_name))
-                        publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': stackvar_name})
-                        state.stackvar_changes[(last_func.start,offset)] = stackvar_name
-                state.stackvar_lock.release()
+                with state.stackvar_lock:
+                    stackvars = stack_dict_from_list(last_func.vars)
+                    for offset, data in stackvars.items():
+                        # stack variables are more difficult than comments to keep state on, since they
+                        # exist from the beginning, and have a type.  track each one.  start by tracking the first
+                        # time we see it.  if there are changes after that, publish.
+                        stackvar_name, stackvar_type = data
+                        stackvar_val = state.stackvar_changes.get((last_func.start,offset))
+                        if stackvar_val == None:
+                            # never seen before, start tracking
+                            state.stackvar_changes[(last_func.start,offset)] = stackvar_name
+                        elif stackvar_val != stackvar_name:
+                            # stack var name changed, publish
+                            log_info('revsync: user changed stackvar name at offset %#x to %s' % (offset, stackvar_name))
+                            publish(bv, {'cmd': 'stackvar_renamed', 'addr': last_func.start, 'offset': offset, 'name': stackvar_name})
+                            state.stackvar_changes[(last_func.start,offset)] = stackvar_name
 
                 if state.track_coverage:
                     cur_bb = get_cur_bb()
