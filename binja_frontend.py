@@ -108,6 +108,14 @@ def get_syms(bv, sym_type):
     # turn our list into dict of addr => sym name
     syms_dict = dict()
     for sym in syms:
+        # Sometimes there are duplicate symbols for a given address, and the
+        # order they're returned from bv.get_symbols_of_type is
+        # nondeterministic.
+        # This created a bug where revsync would think the user renamed a ton of
+        # symbols whenever that order happened to change.
+        # This is probably slow, but I don't know what else to do about it
+        if bv.get_symbol_at(sym.address) != sym:
+            continue
         syms_dict[sym.address] = sym.name
     return syms_dict
 
