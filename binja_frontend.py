@@ -444,7 +444,7 @@ def watch_syms(bv, sym_type):
 
             state.data_syms = get_syms(bv, SymbolType.DataSymbol)
             state.func_syms = get_syms(bv, SymbolType.FunctionSymbol)
-            time.sleep(0.5)
+        time.sleep(0.5)
 
 def watch_cur_func(bv):
     """ Watch current function (if we're in code) for comment changes and publish diffs """
