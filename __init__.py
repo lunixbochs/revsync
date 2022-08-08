@@ -84,3 +84,4 @@ if not good:
 def vivExtension(vw, vwgui):
     import viv_frontend
     viv_frontend.vivExtension(vw, vwgui)
+
