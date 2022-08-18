@@ -30,7 +30,7 @@ class State:
     def __init__(self, bv):
         self.cov = Coverage()
         self.comments = Comments()
-        self.fhash = get_fhash(bv.file.filename)
+        self.fhash = get_fhash(bv)
         self.running = True
         self.cmt_changes = {}
         self.cmt_lock = Lock()
@@ -52,9 +52,36 @@ IDLE_ASK = 250
 COLOUR_PERIOD = 20
 BB_REPORT = 50
 
-def get_fhash(fname):
-    with open(fname, 'rb') as f:
-        return hashlib.sha256(f.read()).hexdigest().upper()
+def get_top_bv(bv):
+    """Find most-top-level BinaryView for bv
+
+    BN supports multiple nested layers (although in practice there are
+    only two)
+    We don't want the loaded view of the ELF, we want the raw, on-disk
+    view.
+    """
+    view = bv
+    while True:
+        walk_view = view.parent_view
+        if walk_view is not None:
+            view = walk_view
+        else:
+            return view
+
+METADATA_FHASH_KEY = "revsync_fhash"
+def get_fhash(bv):
+    try:
+        return bv.query_metadata(METADATA_FHASH_KEY)
+    except KeyError:
+        view = get_top_bv(bv)
+        # This check doesn't actually catch that much, as if you save a patched
+        # binary, it resets the modification state :(
+        if any(i != ModificationStatus.Original for i in
+                view.get_modification(0, view.length)):
+            log_error("revsync: the BinaryView was patched before revsync could cache a copy of the original hash. revsync will not properly sync changes with others.")
+        fhash = hashlib.sha256(view.read(0, view.length)).hexdigest().upper()
+        bv.store_metadata(METADATA_FHASH_KEY, fhash)
+        return fhash
 
 def get_can_addr(bv, addr):
     return addr - bv.start
