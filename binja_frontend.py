@@ -52,18 +52,28 @@ IDLE_ASK = 250
 COLOUR_PERIOD = 20
 BB_REPORT = 50
 
+def get_top_bv(bv):
+    """Find most-top-level BinaryView for bv
+
+    BN supports multiple nested layers (although in practice there are
+    only two)
+    We don't want the loaded view of the ELF, we want the raw, on-disk
+    view.
+    """
+    view = bv
+    while True:
+        walk_view = view.parent_view
+        if walk_view is not None:
+            view = walk_view
+        else:
+            return view
+
 METADATA_FHASH_KEY = "revsync_fhash"
 def get_fhash(bv):
     try:
         return bv.query_metadata(METADATA_FHASH_KEY)
     except KeyError:
-        # Find most-top-level BinaryView -- BN supports multiple nested layers
-        # (although in practice there are only two)
-        # We don't want the loaded view of the ELF, we want the raw, on-disk
-        # view.
-        view = bv
-        while (walk_view := view.parent_view) is not None:
-            view = walk_view
+        view = get_top_bv(bv)
         # This check doesn't actually catch that much, as if you save a patched
         # binary, it resets the modification state :(
         if any(i != ModificationStatus.Original for i in
