@@ -30,7 +30,7 @@ class State:
     def __init__(self, bv):
         self.cov = Coverage()
         self.comments = Comments()
-        self.fhash = get_fhash(bv.file.filename)
+        self.fhash = get_fhash(bv.file.original_filename)
         self.running = True
         self.cmt_changes = {}
         self.cmt_lock = Lock()
